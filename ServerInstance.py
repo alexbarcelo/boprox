@@ -8,17 +8,18 @@ import logging
 import pyrsync
 import xmlrpc
 
+from ServerConfig import ServerConfig
+
 # debugging now!
 logger = logging.getLogger('minimalclient')
 logger.setLevel(logging.DEBUG)
 
-# Configure below
-REPO='./NoNameRepo'
-HASHESDIR='./NoNameHashes'
-DELTADIR='./NoNameDeltas'
-HARDDIR='./NoNameHard'
-DBFILE="./NoNameSQLite"
-# Configure above
+# Getting configuration
+REPO=ServerConfig['Directories']['repository']
+HASHESDIR=ServerConfig['Directories']['hashes']
+DELTADIR=ServerConfig['Directories']['deltas']
+HARDDIR=ServerConfig['Directories']['hard']
+DBFILE=ServerConfig['Directories'].get('dbfile', "./NoNameSQLite")
 
 # Type of errors
 ERR_GENERIC  = -1
