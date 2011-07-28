@@ -43,9 +43,10 @@ REV_ROLLEDBACK   = 4
 REV_MODIFIED     = 5
 
 class ServerInstance():
-    def __init__(self):
+    def __init__(self, serverParent = None):
         import string
         self.python_string = string
+        self.serverParent = serverParent
         # Test existance of SQLite file
         try:
             self.__conn = sqlite3.connect(DBFILE, 
@@ -79,7 +80,11 @@ class ServerInstance():
             # should do something here . . .
             print ("Should do something here - SQLite error")
             pass
-            
+        
+    def _getUsername(self):
+        if self.serverParent:
+            return self.serverParent.username
+        return None
             
     def SendDelta(self, idRev, delta, binchksum = None, size = 'NULL'):
         """Send delta to server (see rsync algorithm)"""        

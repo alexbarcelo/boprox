@@ -50,6 +50,7 @@ class SimpleXMLRPCServerTLS(SimpleXMLRPCServer):
         call, which is rewritten using TLS
         """
         self.logRequests = logRequests
+        self.username = None
 
         SimpleXMLRPCDispatcher.__init__(self, allow_none, encoding)
 
@@ -86,7 +87,7 @@ class SimpleXMLRPCServerTLS(SimpleXMLRPCServer):
                         self.send_error(401, 'Authentication failed')
                 return False
            
-            def authenticate(self, headers):
+            def authenticate(myself, headers):
                 
                 #    Confirm that Authorization header is set to Basic
                 try:
@@ -105,6 +106,8 @@ class SimpleXMLRPCServerTLS(SimpleXMLRPCServer):
                     #    Check that username and password match internal global dictionary
                     if username in userPassDict:
                         if userPassDict[username] == password:
+                            print ('Authentication for user' , username)
+                            self.username = username
                             return True
                 except:
                     pass # Error in headers, ignore it and assume a 401
@@ -142,7 +145,7 @@ def executeServer():
     # Create server
     server = SimpleXMLRPCServerTLS((LISTEN_HOST, LISTEN_PORT), requestHandler=RequestHandler)
     server.register_introspection_functions()
-    server.register_instance(ServerInstance())
+    server.register_instance(ServerInstance(server))
 
     # Run the server's main loop
     sa = server.socket.getsockname()
