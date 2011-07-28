@@ -14,8 +14,8 @@ from xmlrpc.server import SimpleXMLRPCServer, SimpleXMLRPCDispatcher, SimpleXMLR
 from base64 import b64decode
 import os
 
+from ServerConfig import ServerConfig
 from ServerInstance import ServerInstance
-
 
 try:
     import fcntl
@@ -24,13 +24,12 @@ except ImportError:
 
 import pyrsync
 
-# Configure below
-LISTEN_HOST='0.0.0.0' # You should not use '' here, unless you have a real FQDN.
-LISTEN_PORT=1356
+# Getting configuration
+LISTEN_HOST=ServerConfig['Network'].get('address','127.0.0.1')
+LISTEN_PORT=int ( ServerConfig['Network'].get('port','1356') )
 
-KEYFILE='key.pem'            # PEM formatted key file
-CERTFILE='certificate.pem'  # PEM formatted certificate file
-# Configure above
+KEYFILE =ServerConfig['Certificates'].get('key')   # PEM formatted key file
+CERTFILE=ServerConfig['Certificates'].get('cert')  # PEM formatted certificate file
 
 #    Easiest way to create the key file pair was to use OpenSSL -- http://openssl.org/ Windows binaries are available
 #    You can create a self-signed certificate easily "openssl req -new -x509 -days 365 -nodes -out cert.pem -keyout privatekey.pem"
