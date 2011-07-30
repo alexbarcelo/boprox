@@ -7,6 +7,8 @@ Created on Jul 30, 2011
 
 import argparse
 import configparser
+import server
+import auth
 
 if __name__ == '__main__':
     # First get the defaults
@@ -54,3 +56,12 @@ if __name__ == '__main__':
     if args.port:
         config['Network']['port'] = args.port
         
+    userauth = auth.UserSQLiteAuth(config['Database']['dbusers'])
+    boproxserver = server.AuthXMLRPCServerTLS(
+        (config['Network']['address'], config['Network']['port']), 
+        userauth=userauth , 
+        keyfile=config['Certificates']['key'] , 
+        certfile=config['Certificates']['cert']
+        )
+    boproxserver.register_introspection_functions()
+    boproxserver.register_instance(server.ServerInstance(server))
