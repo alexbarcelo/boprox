@@ -55,11 +55,9 @@ if __name__ == '__main__':
         config['Network']['address'] = args.address
     if args.port:
         config['Network']['port'] = args.port
-        
+    bindtoaddr = (config['Network']['address'], int(config['Network']['port']))
     userauth = auth.UserSQLiteAuth(config['Database']['dbusers'])
-    boproxserver = server.AuthXMLRPCServerTLS(
-        (config['Network']['address'], int(config['Network']['port'])),
-        userauth=userauth , 
+    boproxserver = server.AuthXMLRPCServerTLS( bindtoaddr, userauth=userauth,
         keyfile=config['Certificates']['key'] , 
         certfile=config['Certificates']['cert']
         )

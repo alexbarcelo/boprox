@@ -50,12 +50,12 @@ class ServerInstance():
         self.serverParent = serverParent
         # Test existance of SQLite file
         try:
-            self.__conn = sqlite3.connect(DBFILE, 
+            self._conn = sqlite3.connect(DBFILE, 
                 detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-            self.__conn.row_factory = sqlite3.Row
+            self._conn.row_factory = sqlite3.Row
 
             # create things if not already exists
-            with self.__conn as c:
+            with self._conn as c:
                 c.execute('''create table if not exists 
                     files(
                         idfile integer primary key autoincrement,
@@ -99,7 +99,7 @@ class ServerInstance():
         logger.debug("Receiving delta, now()=%s" , repr(tsnow) )
         logger.debug("Chksum received: %s" , repr(chksum) )
         #check if everything is ok
-        with self.__conn as c:
+        with self._conn as c:
             logger.debug ( "Getting row of revisions . . ." )
             rowRev = c.execute ( "select * from revisions where idrev=?" ,(idRev,)).fetchone()
             logger.debug ( "Getting row of file information . . ." )
@@ -144,7 +144,7 @@ class ServerInstance():
         # then everything would seem more awkward
         # Maybe is more pytonic, and raise when needed
         deltaHistory = [ startRev ]
-        with self.__conn as c:
+        with self._conn as c:
             revRow = c.execute ( '''select * from revisions
                 where idrev=?''' , (startRev,) ).fetchone()
             while revRow[eventType] != condition:
@@ -166,7 +166,7 @@ class ServerInstance():
         """Get delta (see rsync algorithm) to jump between two revisions"""
         
         #if it's the easy way, we do it the easy way (most likely to hapen)
-        with self.__conn as c:
+        with self._conn as c:
             revRow = c.execute( "select * from revisions where idrev=?" , idRev).fetchone()
         
         if (revRow['fromrev'] == idFromRev) and (revRow['fromtype'] == REV_MODIFIED):
@@ -218,7 +218,7 @@ class ServerInstance():
     def GetLastRev(self, filepath):
         """Get the id of the last revision of some file
         Get it by the identificator of """
-        with self.__conn as c:
+        with self._conn as c:
             row = c.execute ( '''select lastrev from files
                 where path=?''' , (filepath,) ).fetchone()
         if row == None:
@@ -228,7 +228,7 @@ class ServerInstance():
     def GetFileNews(self, timestamp):
         """Get a list of changes since timestamp (idFile affected)"""
         logger.debug('Getting news from %s' , repr(timestamp) )
-        with self.__conn as c:
+        with self._conn as c:
             cur = c.execute ( '''select idfile, timestamp as "ts [timestamp]" 
                 from revisions order by timestamp desc''' )
         logger.debug ('Cursor: %s' , repr(cur) )
@@ -247,7 +247,7 @@ class ServerInstance():
         logger.debug ( "Getting pathnames for modified files" )
         pathList = []
         for i in idsChanged:
-            with self.__conn as c:
+            with self._conn as c:
                 pathList.append ( c.execute ( '''select path
                     from files where idfile=?''', (i,) ).fetchone()['path'] )
         
@@ -294,7 +294,7 @@ class ServerInstance():
         tsnow = datetime.now()
         
         try:
-            with self.__conn as c:
+            with self._conn as c:
                 cursor = c.execute("insert into files (path, deleted) values (?,0)", 
                     (newfile,) )
                 idfile = cursor.lastrowid
@@ -334,7 +334,7 @@ class ServerInstance():
         
         logger.info( 'Getting full revision for %s' , str(idRev) )
         
-        with self.__conn as c:
+        with self._conn as c:
             row = c.execute ('''select * from revisions where
                 idrev=?''' , (idRev,) ).fetchone()
             
