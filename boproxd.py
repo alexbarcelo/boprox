@@ -58,10 +58,12 @@ if __name__ == '__main__':
         
     userauth = auth.UserSQLiteAuth(config['Database']['dbusers'])
     boproxserver = server.AuthXMLRPCServerTLS(
-        (config['Network']['address'], config['Network']['port']), 
+        (config['Network']['address'], int(config['Network']['port'])),
         userauth=userauth , 
         keyfile=config['Certificates']['key'] , 
         certfile=config['Certificates']['cert']
         )
     boproxserver.register_introspection_functions()
-    boproxserver.register_instance(server.ServerInstance(server))
+    boproxserver.register_instance(server.ServerInstance(server, config))
+    
+    boproxserver.serve_forever()
