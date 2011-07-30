@@ -130,10 +130,8 @@ class AuthXMLRPCServerTLS(SimpleXMLRPCServer):
             flags = fcntl.fcntl(self.fileno(), fcntl.F_GETFD)
             flags |= fcntl.FD_CLOEXEC
             fcntl.fcntl(self.fileno(), fcntl.F_SETFD, flags)
-
-# debugging now!
-logger = logging.getLogger('minimalclient')
-logger.setLevel(logging.DEBUG)
+            
+#############################################################
 
 # Type of errors
 ERR_GENERIC  = -1
@@ -162,6 +160,10 @@ class ServerInstance():
         import string
         self.python_string = string
         self.serverParent = serverParent
+        
+        # debugging now!
+        self._logger = logging.getLogger('minimalclient')
+        self._logger.setLevel(logging.DEBUG)
         
         if config:
             self._repodir   = config['Directories']['repo']
@@ -225,23 +227,23 @@ class ServerInstance():
         except AttributeError:
             chksum = 'NULL'
         
-        logger.debug("Receiving delta, now()=%s" , repr(tsnow) )
-        logger.debug("Chksum received: %s" , repr(chksum) )
+        self._logger.debug("Receiving delta, now()=%s" , repr(tsnow) )
+        self._logger.debug("Chksum received: %s" , repr(chksum) )
         #check if everything is ok
         with self.__conn as c:
-            logger.debug ( "Getting row of revisions . . ." )
+            self._logger.debug ( "Getting row of revisions . . ." )
             rowRev = c.execute ( "select * from revisions where idrev=?" ,(idRev,)).fetchone()
-            logger.debug ( "Getting row of file information . . ." )
+            self._logger.debug ( "Getting row of file information . . ." )
             rowFile = c.execute ( "select * from files where idfile=?" ,
                 (rowRev['idfile'],) ).fetchone()
             if rowFile['lastrev'] != idRev:
-                logger.info("Error: Outdated client")
+                self._logger.info("Error: Outdated client")
                 return ERR_OUTDATED                
             if rowFile['deleted'] == 1:
-                logger.info("Error: file in deleted state")
+                self._logger.info("Error: file in deleted state")
                 return ERR_DELETED
             
-            logger.debug ( "Inserting new revision into database . . ." )
+            self._logger.debug ( "Inserting new revision into database . . ." )
             try:
                 cur = c.execute ( '''insert into revisions 
                     (idfile, timestamp, fromrev, typefrom, chksum, size, hardexist) values
@@ -255,12 +257,12 @@ class ServerInstance():
                 raise
                 return ERR_SQL
         
-        logger.debug ( "Going to write the delta file" )
+        self._logger.debug ( "Going to write the delta file" )
         #now, save the delta
         with open ( os.path.join(self._deltasdir,str(nextRev)) , "wb" ) as f:
             pickle.dump(delta, f)
         
-        logger.debug ( "Latest revision: %s" , int(nextRev) )
+        self._logger.debug ( "Latest revision: %s" , int(nextRev) )
         return nextRev, tsnow
     
     def getDeltasSinceEvent ( self, eventType , condition , startRev ):
@@ -284,7 +286,7 @@ class ServerInstance():
                     # asking for impossible connexion
                     return ERR_CANNOT
                     
-                logger.debug ( 'This row %s has %s in %s' , 
+                self._logger.debug ( 'This row %s has %s in %s' , 
                     str(revRow['idrev']) , str(revRow[eventType]) , 
                     eventType )
                     
@@ -320,7 +322,7 @@ class ServerInstance():
             # 2nd: try to join everything
             try:
                 val = deltaList.pop()
-                logger.debug ( "Getting delta for %s" , str(val) )
+                self._logger.debug ( "Getting delta for %s" , str(val) )
                 delta = pickle.load( os.path.join(
                     self._deltasdir , str( val ) 
                     ) )
@@ -356,16 +358,16 @@ class ServerInstance():
         
     def GetFileNews(self, timestamp):
         """Get a list of changes since timestamp (idFile affected)"""
-        logger.debug('Getting news from %s' , repr(timestamp) )
+        self._logger.debug('Getting news from %s' , repr(timestamp) )
         with self.__conn as c:
             cur = c.execute ( '''select idfile, timestamp as "ts [timestamp]" 
                 from revisions order by timestamp desc''' )
-        logger.debug ('Cursor: %s' , repr(cur) )
+        self._logger.debug ('Cursor: %s' , repr(cur) )
         idsChanged = set()
         row=cur.fetchone()
-        logger.debug ('First row: %s' , repr(row) )
+        self._logger.debug ('First row: %s' , repr(row) )
         while row:
-            logger.debug ( "This row has timestamp %s (type %s), for idfile %s" , 
+            self._logger.debug ( "This row has timestamp %s (type %s), for idfile %s" , 
                 repr(row['ts']), type(row['ts']) , str(row['idfile']) )
             if row['ts'] > timestamp:
                 idsChanged.add( row['idfile'] )
@@ -373,14 +375,14 @@ class ServerInstance():
                 break
             row = cur.fetchone()
         
-        logger.debug ( "Getting pathnames for modified files" )
+        self._logger.debug ( "Getting pathnames for modified files" )
         pathList = []
         for i in idsChanged:
             with self.__conn as c:
                 pathList.append ( c.execute ( '''select path
                     from files where idfile=?''', (i,) ).fetchone()['path'] )
         
-        logger.debug( "Changed files: %s" , repr(pathList) )
+        self._logger.debug( "Changed files: %s" , repr(pathList) )
             
         return pathList
         
@@ -394,7 +396,7 @@ class ServerInstance():
         """Create a NON-EXISTING file in *filepath*, with *data* contents"""
         
         filepath = os.path.join(self._repodir,newfile)
-        logger.debug ( "Receiving file %s, saving as %s" , newfile , filepath )
+        self._logger.debug ( "Receiving file %s, saving as %s" , newfile , filepath )
         
         ##full of bugs and security holes here! let's rock let's party
         if os.path.exists(filepath):
@@ -445,7 +447,7 @@ class ServerInstance():
             
         try:
             revPath = os.path.join ( self._hardsdir ,str(idrev) )
-            logger.info ( "Proceeding to link %s and %s" , filepath , revPath ) 
+            self._logger.info ( "Proceeding to link %s and %s" , filepath , revPath ) 
             os.link ( filepath ,  revPath )
         except:
             return ERR_FS
@@ -461,7 +463,7 @@ class ServerInstance():
         """Get a file by its revision identificator (not necessarily
         the most actual version of the file)"""
         
-        logger.info( 'Getting full revision for %s' , str(idRev) )
+        self._logger.info( 'Getting full revision for %s' , str(idRev) )
         
         with self.__conn as c:
             row = c.execute ('''select * from revisions where
@@ -469,34 +471,34 @@ class ServerInstance():
             
             #check if it can be the easy way
             if row['hardexist'] != 1:
-                logger.debug ( 'Doing it the hard way' )
+                self._logger.debug ( 'Doing it the hard way' )
                 # hard way, let's build the hard copy
                 # search for last hard copy first
                 deltaList = self.getDeltasSinceEvent ( 'hardexist' , 1 , idRev )
-                logger.debug ( "(in GetFullRevision) Variable deltaList received: %s" , repr(deltaList) )
+                self._logger.debug ( "(in GetFullRevision) Variable deltaList received: %s" , repr(deltaList) )
                 if type(deltaList) == int:
-                    logger.debug ( "deltaList is a int")
+                    self._logger.debug ( "deltaList is a int")
                     return deltaList
                 
                 # join everything
                 #first throw away this, but save for later
                 hardRev = deltaList.pop()
-                logger.debug ( "Getting delta" )
+                self._logger.debug ( "Getting delta" )
                 try:
                     val = str(deltaList.pop())
-                    logger.debug ( "  - Now: %s" , val )
+                    self._logger.debug ( "  - Now: %s" , val )
                     with open(os.path.join( self._deltasdir , val), "rb") as f:
                         delta = pickle.load( f )
                     while deltaList:
                         val = str(deltaList.pop())
-                        logger.debug ( "  - Now: %s" , val )
+                        self._logger.debug ( "  - Now: %s" , val )
                         with open(os.path.join( self._deltasdir , val ) , "rb") as f:
                             pyrsync.joindeltas ( delta , pickle.load( f ) )
                 except:
                     raise
                     return ERR_FS
                 
-                logger.debug ( "Empty deltalist, last value: %s" , str(val) )
+                self._logger.debug ( "Empty deltalist, last value: %s" , str(val) )
                 
                 # the last one, now will have hardcopy
                 c.execute ( '''update revisions set hardexist=1
@@ -506,14 +508,14 @@ class ServerInstance():
                 row = c.execute ( '''select * from revisions 
                     where idrev=?''' , (hardRev,) ).fetchone()
                 
-                logger.info ( "Creating hard revision %s from revision %s" ,
+                self._logger.info ( "Creating hard revision %s from revision %s" ,
                     idRev , hardRev )
                 
                 with open ( os.path.join(self._hardsdir,str(val)) , "wb" ) as outstream:
                     with open ( os.path.join(self._hardsdir,str(row['idrev'])) , "rb" ) as instream:
                         pyrsync.patchstream ( instream, outstream, delta )
         
-        logger.debug ( 'Sending hard revision to client' )
+        self._logger.debug ( 'Sending hard revision to client' )
         with open ( os.path.join ( self._hardsdir , str(idRev) ) , "rb" ) as f:
             data = xmlrpc.client.Binary ( f.read() )
         return data
