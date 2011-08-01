@@ -5,7 +5,8 @@ Created on Jul 30, 2011
 '''
 
 import rsa
-import pyasn1
+from pyasn1.codec.der.decoder import decode as derdecode
+from base64 import b64decode
 import random
 import sqlite3
 from datetime import datetime
@@ -119,6 +120,25 @@ class UserSQLiteAuth:
         # 64 bits of random bits, hex representation
         return hex(self._randgen.getrandbits(64))[2:-1]
     
+    def _encryptToken (self, token, publickey):
+        '''
+        Return encrypted token
+        
+        @param token: An arbitrary string to be encrypted. Assumed to be "quite"
+        random, no padding is done nor further security considerations.
+        @param publickey: A string containing a PEM public key, normally 
+        multiline. We assume that there is NO header. Normally this value is 
+        retrieved from inside the database
+        
+        @return a string containing the token encrypted, ready to be 
+        sent to the user
+        '''
+        derbits = b64decode(publickey)
+        pubkey  = derdecode(derbits)[0]
+        # The PEM should be in this schema
+        key = { 'n': int(pubkey[0]) , 'e': int(pubkey[1]) }
+        rsa.encrypt(token, key)
+
     def getNewToken (self, user):
         '''
         Using the known public key of a user, generate a random token
@@ -145,12 +165,7 @@ class UserSQLiteAuth:
                 values
                     (?,?,?)
                 ''' , (user,datetime.now(),token) )
-            
-        # TODO
-        # Here we use something crypto to encrypt
-        # ...
-        # etoken = encrypt(token)
-        #
         
-        etoken = token
+        etoken = self._encryptToken ( token , row['publickey'] )
+        
         return etoken
