@@ -4,7 +4,8 @@ Created on Jul 30, 2011
 @author: marius
 '''
 
-import Crypto
+#import SomeCryptoLibrary
+import random
 import sqlite3
 from datetime import datetime
 
@@ -22,6 +23,7 @@ class UserSQLiteAuth:
         # default is no-timeout of token password
         self._timeout = -1 
         self._constusers = {}
+        self._randgen = random.SystemRandom()
         
         self._dbkeys = sqlite3.connect(dbusers ,
             detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
@@ -76,7 +78,7 @@ class UserSQLiteAuth:
         Check if the user and password are correct.
         
         @param user: Username
-        @param secret: Password
+        @param secret: Password token
         @return True when the user is known and the password token is correct,
         False otherwise
         '''
@@ -102,3 +104,52 @@ class UserSQLiteAuth:
                         (user,) )
                     return False
         return True
+    
+    def _genToken (self):
+        '''
+        Create a new token. The random source is random.SystemRandom
+        (should be enough). Changing the token type and length should not
+        be a problem. Be careful on security issues.
+
+        @return: A string that can be used as a password token --random 
+        and secure. Secure means that a user should not be able to collide
+        them or obtain a pattern of generation.
+        '''
+        # 64 bits of random bits, hex representation
+        return hex(self._randgen.getrandbits(64))[2:-1]
+    
+    def getNewToken (self, user):
+        '''
+        Using the known public key of a user, generate a random token
+        and return it encrypted for the user, after adding it to the list
+        of current tokens
+        
+        @param user: Known username (the public key of the user must in 
+        the sqlite file)
+        '''
+        with self._dbkeys as c:
+            row = c.execute ('''select publickey from users 
+                where username=?''' , (user,) ).fetchone()
+        # If row is none, the user is unknown
+        if not row:
+            return None
+        
+        token = self._genToken()
+        
+        with self._dbtoken as c:
+            c.execute ( 'delete from tokens where username=?', (user,))
+            c.execute ( '''insert into 
+                tokens 
+                    (username, timestamp, token)
+                values
+                    (?,?,?)
+                ''' , (user,datetime.now(),token) )
+            
+        # TODO
+        # Here we use something crypto to encrypt
+        # ...
+        # etoken = encrypt(token)
+        #
+        
+        etoken = token
+        return etoken
