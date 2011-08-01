@@ -164,7 +164,7 @@ class ServerInstance():
         self.serverParent = serverParent
         
         # debugging now!
-        self._logger = logging.getLogger('minimalclient')
+        self._logger = logging.getLogger('boproxd')
         self._logger.setLevel(logging.DEBUG)
         
         if config:
