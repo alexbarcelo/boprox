@@ -24,7 +24,7 @@ http://samba.anu.edu.au/rsync/.
 
 import collections
 import hashlib
-from xmlrpc.client import Binary
+from xmlrpclib import Binary
 
 __all__ = ["rollingchecksum", "weakchecksum", "patchstream", "rsyncdelta",
     "blockchecksums"]

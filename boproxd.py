@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 '''
 Created on Jul 30, 2011
 
@@ -6,14 +6,14 @@ Created on Jul 30, 2011
 '''
 
 import argparse
-import configparser
+import ConfigParser
 import server
 import auth
 
 if __name__ == '__main__':
     # First get the defaults
-    config = configparser.ConfigParser()
-    config.read_dict( {
+    config = ConfigParser.ConfigParser( {
+        # Default values, dictionary
         'Network': {
             'address': '0.0.0.0',
             'port': '1356'             
@@ -32,7 +32,7 @@ if __name__ == '__main__':
             'dbfile': '/var/lib/boprox/file.sqlite',
             'dbusers': '/var/lib/boprox/users.sqlite'            
             }
-        } )
+        } , dict )
 
     # Argument configuration (command line)
     parser = argparse.ArgumentParser(description='Start the boprox daemon',
@@ -46,20 +46,18 @@ if __name__ == '__main__':
     parser.add_argument('--port', dest='port' , help='Local port')
     args = parser.parse_args()
     
-    # No try:except: needed --an error here will be fatal
-    f = open (args.file, 'r' )
-    config.read_file(f)
+    config.read(args.file)
     
     # The configuration... we override it if we have to
     if args.address:
-        config['Network']['address'] = args.address
+        config.set('Network','address' , args.address )
     if args.port:
-        config['Network']['port'] = args.port
-    bindtoaddr = (config['Network']['address'], int(config['Network']['port']))
-    userauth = auth.UserSQLiteAuth(config['Database']['dbusers'])
+        config.set('Network','port', args.port )
+    bindtoaddr = (config.get('Network','address'), config.getint('Network', 'port') )
+    userauth = auth.UserSQLiteAuth(config.get('Database','dbusers'))
     boproxserver = server.AuthXMLRPCServerTLS( bindtoaddr, userauth=userauth,
-        keyfile=config['Certificates']['key'] , 
-        certfile=config['Certificates']['cert']
+        keyfile=config.get('Certificates','key') , 
+        certfile=config.get('Certificates','cert')
         )
     boproxserver.register_introspection_functions()
     boproxserver.register_instance(server.ServerInstance(server, config))

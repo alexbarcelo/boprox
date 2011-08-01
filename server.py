@@ -8,11 +8,11 @@ http://blogs.blumetech.com/blumetechs-tech-blog/2011/06/python-xmlrpc-server-wit
 '''
 
 import socket
-import socketserver
+import SocketServer
 import ssl
 import pickle
-import xmlrpc.client
-from xmlrpc.server import SimpleXMLRPCServer, SimpleXMLRPCDispatcher, SimpleXMLRPCRequestHandler
+from xmlrpclib import Binary
+from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCDispatcher, SimpleXMLRPCRequestHandler
 from base64 import b64decode
 import os
 import pyrsync
@@ -108,7 +108,7 @@ class AuthXMLRPCServerTLS(SimpleXMLRPCServer):
                 return False
        
         #    Override the normal socket methods with an SSL socket
-        socketserver.BaseServer.__init__(self, addr, VerifyingRequestHandler)
+        SocketServer.BaseServer.__init__(self, addr, VerifyingRequestHandler)
         self.socket = ssl.wrap_socket(
             socket.socket(self.address_family, self.socket_type),
             server_side=True,
@@ -166,11 +166,11 @@ class ServerInstance():
         self._logger.setLevel(logging.DEBUG)
         
         if config:
-            self._repodir   = config['Directories']['repo']
-            self._hashesdir = config['Directories']['hashes']
-            self._deltasdir = config['Directories']['deltas']
-            self._hardsdir  = config['Directories']['hards']
-            self._dbfile    = config['Database']['dbfile']
+            self._repodir   = config.get('Directories','repo')
+            self._hashesdir = config.get('Directories','hashes')
+            self._deltasdir = config.get('Directories','deltas')
+            self._hardsdir  = config.get('Directories','hards')
+            self._dbfile    = config.get('Database','dbfile')
         else:
             # Fallback is to do everything "locally"
             self._repodir   = './repo'
@@ -517,5 +517,5 @@ class ServerInstance():
         
         self._logger.debug ( 'Sending hard revision to client' )
         with open ( os.path.join ( self._hardsdir , str(idRev) ) , "rb" ) as f:
-            data = xmlrpc.client.Binary ( f.read() )
+            data = Binary ( f.read() )
         return data
