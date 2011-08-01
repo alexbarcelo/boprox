@@ -96,6 +96,8 @@ class AuthXMLRPCServerTLS(SimpleXMLRPCServer):
                     (username, _, password) = decodedString.partition(':')
                     
                     #    Check that username and password are ok
+                    #Caution! This self is the AuthXMLRPCServerTLS, not `myself'
+                    #(being myself the VerifyingRequestHandler instance) 
                     if self.userauth:
                         if self.userauth.UserOk(username,password):
                             return True
