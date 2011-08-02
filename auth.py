@@ -30,6 +30,9 @@ class UserSQLiteAuth:
         self._dbkeys = sqlite3.connect(dbusers ,
             detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
         self._dbkeys.row_factory = sqlite3.Row
+        # Everything should be ascii, and publickey will be quite large
+        # (performance reasons)
+        self._dbkeys.text_factory = str
         with self._dbkeys as c:
             c.execute ( '''create table if not exists
                 users ( 
@@ -40,7 +43,10 @@ class UserSQLiteAuth:
         
         self._dbtoken = sqlite3.connect ( ":memory:" ,
             detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-        self._dbkeys.row_factory = sqlite3.Row
+        self._dbtoken.row_factory = sqlite3.Row
+        # Everything should be ascii too. And we do not want to mess around
+        # strange encodings for token and username.
+        self._dbtoken.text_factory = str
         with self._dbtoken as c:
             c.execute ( '''create table tokens (
                 username text primary key,
