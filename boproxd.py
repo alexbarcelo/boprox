@@ -20,7 +20,7 @@ if __name__ == '__main__':
             },
         'Certificates': {
             'key': '/etc/boprox/key.pem',
-            'cert': '/etc/boprox/certificate.pem'
+            'cert': '/etc/boprox/cert.pem'
             },
         'Directories': {
             'repo': '/var/lib/boprox/repo',
