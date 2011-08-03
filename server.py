@@ -82,7 +82,13 @@ class AuthXMLRPCServerTLS(SimpleXMLRPCServer):
                 
                 #    Confirm that Authorization header is set to Basic
                 try:
-                    (basic, _, encoded) = headers.get('Authorization').partition(' ')
+                    authheader = headers.get('Authorization')
+                    if not authheader:
+                        # Connection without authentication
+                        self.username = None
+                        return True
+                    
+                    (basic, _, encoded) = authheader.partition(' ')
                     assert basic == 'Basic', 'Only basic authentication supported'
                
                     #    Encoded portion of the header is a string
@@ -100,7 +106,10 @@ class AuthXMLRPCServerTLS(SimpleXMLRPCServer):
                     #(being myself the VerifyingRequestHandler instance) 
                     if self.userauth:
                         if self.userauth.UserOk(username,password):
+                            self.username = username
                             return True
+                        else:
+                            return False
                     else:
                         # No user authentication method, 
                         # this may be a security hole
@@ -111,6 +120,17 @@ class AuthXMLRPCServerTLS(SimpleXMLRPCServer):
        
         #    Override the normal socket methods with an SSL socket
         SocketServer.BaseServer.__init__(self, addr, VerifyingRequestHandler)
+        
+        if not os.path.isfile(keyfile):
+            print "Keyfile", keyfile, "does not exist"
+            exit(-55)
+        
+        if not os.path.isfile(certfile):
+            print "Certfile", certfile, "does not exist"
+            exit(-56)
+        
+        print "Using keyfile:", keyfile
+        print "Using certfile:", certfile
         self.socket = ssl.wrap_socket(
             socket.socket(self.address_family, self.socket_type),
             server_side=True,
@@ -214,12 +234,18 @@ class ServerInstance():
             # should do something here . . .
             print "Should do something here - SQLite error"
             pass
+    
+    def ping(self):
+        '''
+        Very dummy function
+        '''
+        return 'pong'
         
     def _getUsername(self):
         if self.serverParent:
             return self.serverParent.username
         return None
-            
+        
     def SendDelta(self, idRev, sentdelta, binchksum = None, size = 'NULL'):
         """Send delta to server"""        
         tsnow = datetime.now()
