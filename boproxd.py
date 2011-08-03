@@ -31,6 +31,10 @@ if __name__ == '__main__':
         'Database': {
             'dbfile': '/var/lib/boprox/file.sqlite',
             'dbusers': '/var/lib/boprox/users.sqlite'            
+            },
+        'Administration': {
+            'enabled': '0',
+            'pass': 'ChangeMe'
             }
         } , dict )
 
@@ -55,6 +59,10 @@ if __name__ == '__main__':
         config.set('Network','port', args.port )
     bindtoaddr = (config.get('Network','address'), config.getint('Network', 'port') )
     userauth = auth.UserSQLiteAuth(config.get('Database','dbusers'))
+    # If administration account is enabled, put it in the constant users list
+    if config.getboolean('Administration', 'enabled'):
+        adminpass = config.get('Administration', 'pass')
+        userauth.setConstUsers( ('admin',adminpass) )
     boproxserver = server.AuthXMLRPCServerTLS( bindtoaddr, userauth=userauth,
         keyfile=config.get('Certificates','key') , 
         certfile=config.get('Certificates','cert')

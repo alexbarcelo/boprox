@@ -52,3 +52,11 @@ if __name__ == '__main__':
         print serverConn.ping()
     except:
         print "Error!"
+    
+    serverConn = xmlrpclib.ServerProxy("https://admin:IChangedIt@127.0.0.1:1356")
+    print "Sending ping from the admin account (enabled in configuration file)"
+    try:
+        print serverConn.ping()
+    except:
+        print "Error!"
+
