@@ -103,7 +103,8 @@ class AuthXMLRPCServerTLS(SimpleXMLRPCServer):
                     
                     #    Check that username and password are ok
                     #Caution! This self is the AuthXMLRPCServerTLS, not `myself'
-                    #(being myself the VerifyingRequestHandler instance) 
+                    #(being myself the VerifyingRequestHandler instance)
+                    self.username = None 
                     if self.userauth:
                         if self.userauth.UserOk(username,password):
                             self.username = username
@@ -168,6 +169,7 @@ ERR_DELETED  = -16
 ERR_CANNOT   = -17
 ERR_NOTEXIST = -18
 ERR_INTERNAL = -19
+ERR_USER     = -20
 
 # What can a revision come from:
 REV_NEWFILE      = 0
@@ -182,6 +184,11 @@ class ServerInstance():
         import string
         self.python_string = string
         self.serverParent = serverParent
+        
+        try:
+            self._userauth = serverParent.userauth
+        except AttributeError:
+            self._userauth = None
         
         # debugging now!
         self._logger = logging.getLogger('boproxd')
@@ -239,7 +246,33 @@ class ServerInstance():
         '''
         Very dummy function
         '''
-        return 'pong'
+        username = self._getUsername()
+        
+        if not username:
+            return 'to anonymous: pong'
+        else:
+            return 'pong to', username
+    
+    def requestToken(self, username):
+        '''
+        Request a new password token
+        
+        @param username: Name of the user. Should be a known user (in the
+        users database).
+        @return: The RSA encrypted token. The user will be able to decrypt
+        it with they private RSA key .
+        '''
+        if not self._userauth:
+            # not having user authentication mechanisms means
+            # something is quite wrong
+            self._logger.warning('No authentication mechanism set')
+            return ERR_INTERNAL
+            
+        etoken = self._userauth.getNewToken (username)
+        
+        if not etoken:
+            return ERR_USER
+        return etoken
         
     def _getUsername(self):
         if self.serverParent:

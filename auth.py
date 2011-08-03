@@ -143,7 +143,7 @@ class UserSQLiteAuth:
         pubkey  = derdecode(derbits)[0]
         # The PEM should be in this schema
         key = { 'n': int(pubkey[0]) , 'e': int(pubkey[1]) }
-        rsa.encrypt(token, key)
+        return rsa.encrypt(token, key)
 
     def getNewToken (self, user):
         '''

@@ -60,7 +60,7 @@ if __name__ == '__main__':
         certfile=config.get('Certificates','cert')
         )
     boproxserver.register_introspection_functions()
-    boproxserver.register_instance(server.ServerInstance(server, config))
+    boproxserver.register_instance(server.ServerInstance(boproxserver, config))
     
     sa = boproxserver.socket.getsockname()
     print "Serving HTTPS on", sa[0], "port", sa[1]
