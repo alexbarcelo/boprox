@@ -8,6 +8,7 @@ import xmlrpclib
 import rsa
 from pyasn1.codec.der.decoder import decode as derdecode
 from base64 import b64decode
+from time import sleep
 
 if __name__ == '__main__':
     serverAuth = xmlrpclib.ServerProxy("https://127.0.0.1:1356")
@@ -59,3 +60,18 @@ if __name__ == '__main__':
     serverConn = xmlrpclib.ServerProxy("https://admin:IChangedIt@127.0.0.1:1356")
     print "Sending ping from the admin account (enabled in configuration file)"
     print serverConn.ping()
+    
+    print "Waiting for token timeout. . ."
+    sleep(5)
+    authURL = 'https://' + 'johnsmith' + ':' + token + '@' + '127.0.0.1' + ':' + '1356' 
+    serverConn = xmlrpclib.ServerProxy(authURL)
+    
+    print "Sending ping from authorized user after 5 seconds. Response:"
+    try:
+        print serverConn.ping()
+    except xmlrpclib.ProtocolError as e:
+        if e.errcode == 401:
+            print "Authentication error 401, as expected"
+        else:
+            print "Not expected error:", e.errmsg
+    
