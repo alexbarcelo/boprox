@@ -10,17 +10,17 @@ http://blogs.blumetech.com/blumetechs-tech-blog/2011/06/python-xmlrpc-server-wit
 import socket
 import SocketServer
 import ssl
-import pickle
 from xmlrpclib import Binary
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCDispatcher, SimpleXMLRPCRequestHandler
 from base64 import b64decode
 import os
-import pyrsync
 import sqlite3
 import logging
 from datetime import datetime
 from zlib import adler32
 import sys
+
+from deltaindustries import Hashes, Deltas
 
 try:
     import fcntl
@@ -220,8 +220,8 @@ class ServerInstance():
             return self.serverParent.username
         return None
             
-    def SendDelta(self, idRev, delta, binchksum = None, size = 'NULL'):
-        """Send delta to server (see rsync algorithm)"""        
+    def SendDelta(self, idRev, sentdelta, binchksum = None, size = 'NULL'):
+        """Send delta to server"""        
         tsnow = datetime.now()
         # get real checksum
         try:
@@ -261,8 +261,8 @@ class ServerInstance():
         
         self._logger.debug ( "Going to write the delta file" )
         #now, save the delta
-        with open ( os.path.join(self._deltasdir,str(nextRev)) , "wb" ) as f:
-            pickle.dump(delta, f)
+        delta = Deltas.load(sentdelta)
+        delta.save(os.path.join(self._deltasdir,str(nextRev)))
         
         self._logger.debug ( "Latest revision: %s" , int(nextRev) )
         return nextRev, tsnow
@@ -305,11 +305,10 @@ class ServerInstance():
         if (revRow['fromrev'] == idFromRev) and (revRow['fromtype'] == REV_MODIFIED):
             #yes, we are lucky!
             try:
-                with open( os.path.join(self._deltasdir,str(idRev)) , "rb") as f:
-                    delta = pickle.load(f)
+                delta = Deltas.open(os.path.join(self._deltasdir,str(idRev)))
             except:
                 delta = ERR_FS
-            return delta
+            return delta.getXMLRPCBinary()
         else:
             if revRow['fromtype'] != REV_MODIFIED:
                 # asking for an inexistant delta 
@@ -325,18 +324,15 @@ class ServerInstance():
             try:
                 val = deltaList.pop()
                 self._logger.debug ( "Getting delta for %s" , str(val) )
-                delta = pickle.load( os.path.join(
-                    self._deltasdir , str( val ) 
-                    ) )
+                delta = Deltas.open(os.path.join(self._deltasdir, str(val)))
                 while deltaList:
-                    pyrsync.joindeltas ( delta , pickle.load( 
-                        os.path.join( self._deltasdir , str(deltaList.pop() ) )
-                        ) )
+                    filename = os.path.join(self._deltasdir, str(deltaList.pop()))
+                    delta.joinDelta ( Deltas.open(filename) )
             except:
                 return ERR_FS
                     
             # 3rd: Send delta
-            return delta
+            return delta.getXMLRPCBinary()
 
     def GetMetaInfo ( self, rev , force=False):
         """Get the metainfo (actually size and chksum) of some revision
@@ -453,12 +449,11 @@ class ServerInstance():
             os.link ( filepath ,  revPath )
         except:
             return ERR_FS
-            
+        
         # calculate here hashes for rsync algorithm
-        with open(filepath, "rb") as f:
-            with open(os.path.join(self._hashesdir,str(idrev) ) , "wb" ) as fdump:
-                pickle.dump(pyrsync.blockchecksums(f), fdump)
-            
+        hashes = Hashes.eval(filepath)
+        hashes.save (os.path.join(self._hashesdir,str(idrev)))
+        
         return idrev, tsnow
         
     def GetFullRevision ( self, idRev ):
@@ -488,14 +483,13 @@ class ServerInstance():
                 self._logger.debug ( "Getting delta" )
                 try:
                     val = str(deltaList.pop())
-                    self._logger.debug ( "  - Now: %s" , val )
-                    with open(os.path.join( self._deltasdir , val), "rb") as f:
-                        delta = pickle.load( f )
+                    self._logger.debug ( "  - First: %s" , val )
+                    delta = Deltas.open(os.path.join(self._deltasdir, val))
                     while deltaList:
                         val = str(deltaList.pop())
-                        self._logger.debug ( "  - Now: %s" , val )
-                        with open(os.path.join( self._deltasdir , val ) , "rb") as f:
-                            pyrsync.joindeltas ( delta , pickle.load( f ) )
+                        filename = os.path.join(self._deltasdir, val)
+                        self._logger.debug ( "  - Now adding %s, at %s" , val, filename )
+                        delta.join (Deltas.open(filename))
                 except:
                     raise
                     return ERR_FS
@@ -513,11 +507,12 @@ class ServerInstance():
                 self._logger.info ( "Creating hard revision %s from revision %s" ,
                     idRev , hardRev )
                 
-                with open ( os.path.join(self._hardsdir,str(val)) , "wb" ) as outstream:
-                    with open ( os.path.join(self._hardsdir,str(row['idrev'])) , "rb" ) as instream:
-                        pyrsync.patchstream ( instream, outstream, delta )
+                infile =  os.path.join(self._hardsdir,str(row['idrev']))
+                outfile = os.path.join(self._hardsdir,str(val))
+                delta.patch(infile, outfile)
         
         self._logger.debug ( 'Sending hard revision to client' )
+        
         with open ( os.path.join ( self._hardsdir , str(idRev) ) , "rb" ) as f:
             data = Binary ( f.read() )
         return data
