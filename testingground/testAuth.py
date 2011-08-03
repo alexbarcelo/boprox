@@ -50,13 +50,12 @@ if __name__ == '__main__':
     print "Sending ping from unauthorized user. Response:"
     try:
         print serverConn.ping()
-    except:
-        print "Error!"
+    except xmlrpclib.ProtocolError as e:
+        if e.errcode == 401:
+            print "Authentication error 401, as expected"
+        else:
+            print "Not expected error:", e.errmsg
     
     serverConn = xmlrpclib.ServerProxy("https://admin:IChangedIt@127.0.0.1:1356")
     print "Sending ping from the admin account (enabled in configuration file)"
-    try:
-        print serverConn.ping()
-    except:
-        print "Error!"
-
+    print serverConn.ping()
