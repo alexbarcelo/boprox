@@ -34,7 +34,8 @@ if __name__ == '__main__':
             },
         'Administration': {
             'enabled': '0',
-            'pass': 'ChangeMe'
+            'pass': 'ChangeMe',
+            'tokentimeout': '600'    
             }
         } , dict )
 
@@ -59,6 +60,7 @@ if __name__ == '__main__':
         config.set('Network','port', args.port )
     bindtoaddr = (config.get('Network','address'), config.getint('Network', 'port') )
     userauth = auth.UserSQLiteAuth(config.get('Database','dbusers'))
+    userauth.setTimeout(config.getint('Administration', 'tokentimeout'))
     # If administration account is enabled, put it in the constant users list
     if config.getboolean('Administration', 'enabled'):
         adminpass = config.get('Administration', 'pass')
