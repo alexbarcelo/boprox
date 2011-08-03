@@ -251,7 +251,7 @@ class ServerInstance():
         if not username:
             return 'to anonymous: pong'
         else:
-            return 'pong to', username
+            return 'pong to ' + username
     
     def requestToken(self, username):
         '''
