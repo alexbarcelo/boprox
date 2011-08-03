@@ -212,7 +212,7 @@ class ServerInstance():
                     ''')
         except:
             # should do something here . . .
-            print ("Should do something here - SQLite error")
+            print "Should do something here - SQLite error"
             pass
         
     def _getUsername(self):
@@ -440,7 +440,7 @@ class ServerInstance():
                     (idrev, idfile) )
                 
         except:
-            print ("Error: ", sys.exc_info()[0])
+            print "Error: ", sys.exc_info()[0]
             return ERR_SQL
             
         try:
