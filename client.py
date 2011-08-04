@@ -7,7 +7,7 @@ Created on Aug 4, 2011
 import rsa
 from pyasn1.codec.der.decoder import decode as derdecode
 from base64 import b64decode
-from xmlrpclib import ServerProxy, Binary
+from xmlrpclib import ServerProxy, Binary, ProtocolError
 import sqlite3
 import os.path
 
@@ -58,6 +58,41 @@ class SingleRepoClient:
         @param remotepath: Remote path to synchronize with (default: .). Useful
         for shared resources or multiuser servers.
         '''
+        
+        # Some magic method-caller
+        class _Method:
+            '''
+            Inspiration in xmlrpclib.py
+    
+            Stripping off the nested support
+            '''
+            def __init__(self,send,name):
+                self.__send = send
+                self.__name = name
+    
+            def __call__(myself, *args):
+                try:
+                    ret = myself.__send(myself.__name, args)
+                    return ret
+                except ProtocolError:
+                    del (self._authConn)
+                    self._requestToken()
+                    # if it fails here, then let the raise "go up"
+                    ret = myself.__send(myself.__name, args)
+                    return ret
+        
+        # Some magic transparent proxy for remote calls
+        class CallProxifier:
+            def __init__(self):
+                pass
+            
+            def __request(myself, methodname, params):
+                func = getattr(self._authConn, methodname)
+                return func(*params)
+            
+            def __getattr__(self, name):
+                return _Method(self.__request, name)
+
         # initialize values
         self._host = host
         self._port = port
@@ -90,7 +125,16 @@ class SingleRepoClient:
         
         # initialize XMLRPC connection
         anonURL = "https://%s:%s" % (host,str(port))
-        self._anonConn = ServerProxy(anonURL, use_datetime=True)
+        self._anonConn = ServerProxy(anonURL)
+        self._requestToken()
+        self._RemoteCaller = CallProxifier()
+
+    def _requestToken(self):
         etoken = self._anonConn.requestToken(self._username)
-        self._token = rsa.decrypt(etoken, key)
+        self._token = rsa.decrypt(etoken, self._key)
+        self._authURL = "https://%s:%s@%s:%s" % (self._username, self._token, 
+            self._host, str(self._port) )
+        self._authConn = ServerProxy(self._authURL)
         
+    def ping(self):
+        return self._RemoteCaller.ping()
