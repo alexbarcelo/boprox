@@ -186,11 +186,8 @@ class SanitizeError(Exception):
         self.char = char
         self.msg  = msg
     def __str__(self):
-        if self.msg:
-            return self.msg + repr(self.char)
-        else:
-            return repr(self.char)
-
+        return self.msg + repr(self.char)
+        
 class ServerInstance():
     def __init__(self, serverParent = None, config = None):
         import string
