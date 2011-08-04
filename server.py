@@ -179,6 +179,18 @@ REV_DELETEFILE   = 3
 REV_ROLLEDBACK   = 4
 REV_MODIFIED     = 5
 
+FORBIDDEN_CHARS = ["\\",'!']
+
+class SanitizeError(Exception):
+    def __init__(self, char, msg='Found this, not allowed in context: '):
+        self.char = char
+        self.msg  = msg
+    def __str__(self):
+        if self.msg:
+            return self.msg + repr(self.char)
+        else:
+            return repr(self.char)
+
 class ServerInstance():
     def __init__(self, serverParent = None, config = None):
         import string
@@ -278,6 +290,35 @@ class ServerInstance():
         if self.serverParent:
             return self.serverParent.username
         return None
+    
+    def _sanitizePath(self, path):
+        '''
+        Check for exploits and dangeros things like ".." folders (way to
+        hack permissions), '/' and '\' characters (on the server everything
+        is in unix separators), forbidden chars, hidden files and folders, etc.
+        
+        @param path: String of a folder or a file. No real filesystem check is
+        done, only chars and construction.
+        '''
+        for ch in FORBIDDEN_CHARS:
+            if ch in path:
+                raise SanitizeError(ch)
+        if (path[0:2] == '..' or path.find('/../') < 0 or path[-2:] == '..'):
+            raise SanitizeError('..')
+        if path[0] == '/':
+            return SanitizeError('\ (root)')
+        path = os.path.normpath(path)
+        # Check for any hidden member (POSIX style, dot prefix)
+        remains = path
+        partofpath = ''
+        while remains or partofpath:
+            remains, partofpath = os.path.split(remains)
+            # check non-emptiness, then check if has dot-prefix
+            if partofpath and partofpath[0] == '.':
+                    raise SanitizeError('. (prefix)')
+                
+        #it seems that everything is ok
+        return os.path.join(self._repodir, path)            
         
     def SendDelta(self, idRev, sentdelta, binchksum = None, size = 'NULL'):
         """Send delta to server"""        
