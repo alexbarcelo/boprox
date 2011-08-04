@@ -11,6 +11,20 @@ import random
 import sqlite3
 from datetime import datetime
 
+TOKENLENGTH = 16
+# A bit more than base64, to generate a very random token 
+uppercase  = [chr(65+i) for i in range(0,26)]
+lowercase  = [chr(97+i) for i in range(0,26)]
+numbers    = [chr(48+i) for i in range(0,10)]
+other      = ['+','=','<','>','-','.','!','(',')','[',']','*',';','_']
+# the '/' character gives invalid URL. Also invalid '?'
+# ':' is valid (it works) but it is confusing (user:to:k:en@localhost:port)
+TOKENCHARS = []
+TOKENCHARS.extend(uppercase)
+TOKENCHARS.extend(lowercase)
+TOKENCHARS.extend(numbers)
+TOKENCHARS.extend(other)
+
 class UserSQLiteAuth:
     '''
     Class to check user permissions --SQLite backend
@@ -123,8 +137,10 @@ class UserSQLiteAuth:
         and secure. Secure means that a user should not be able to collide
         them or obtain a pattern of generation.
         '''
-        # 64 bits of random bits, hex representation
-        return hex(self._randgen.getrandbits(64))[2:-1]
+        token = ''
+        for i in range(0,TOKENLENGTH):
+            token += random.choice(TOKENCHARS)
+        return token
     
     def _encryptToken (self, token, publickey):
         '''
