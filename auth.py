@@ -10,6 +10,7 @@ from base64 import b64decode
 import random
 import sqlite3
 from datetime import datetime
+import os.path
 
 TOKENLENGTH = 16
 # A bit more than base64, to generate a very random token 
@@ -41,17 +42,25 @@ class UserSQLiteAuth:
         self._constusers = {}
         self._randgen = random.SystemRandom()
         
-        self._dbkeys = sqlite3.connect(dbusers ,
+        self._dbusers = sqlite3.connect(dbusers ,
             detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-        self._dbkeys.row_factory = sqlite3.Row
+        self._dbusers.row_factory = sqlite3.Row
         # Everything should be ascii, and publickey will be quite large
         # (performance reasons)
-        self._dbkeys.text_factory = str
-        with self._dbkeys as c:
+        self._dbusers.text_factory = str
+        with self._dbusers as c:
             c.execute ( '''create table if not exists
                 users ( 
                     username text primary key,
                     publickey text
+                    )
+                ''')
+            c.execute ( '''create table if not exists
+                permissions (
+                    idperm integer primary key autoincrement,
+                    username text,
+                    path text,
+                    permcode integer
                     )
                 ''')
         
@@ -94,6 +103,36 @@ class UserSQLiteAuth:
             raise TypeError
         for userpass in userlist:
             self._constusers[userpass[0]] = userpass[1]
+            
+    def _getMaxPermissions (self, perm1, perm2):
+        '''
+        Get the maximum int of permissions between the two parameters. 
+        Return it.
+        '''
+        # TODO
+        # Do something about int and permissions codification
+        pass
+        
+    def GetPermissions (self, user, dirpath):
+        '''
+        Check the permissions of a user in a certain path. The maximum 
+        permissions that this user has (a user may have more than one 
+        effective permission, more specific as the filesystem goes deep).
+        
+        @param user: Username. No check is done, the server has to call to 
+        UserOk before doing any real operation.
+        @param dirpath: Path of a folder. The path should have been sanitized
+        before calling this function. The path cannot be a file path.
+        @return: A permission int, containing the maximum permissions of user 
+        in this folder. 0 if the user has no permissions.
+        '''
+        with self._dbusers as c:
+            cur = c.execute ('select * from permissions where user=?', (user,))
+        currperm = 0
+        for row in cur:
+            if dirpath == os.path.commonprefix([dirpath, row['path']]):
+                self._getMaxPermissions(currperm, row['permcode'])
+        return currperm
         
     def UserOk(self,user,secret):
         '''
@@ -101,7 +140,7 @@ class UserSQLiteAuth:
         
         @param user: Username
         @param secret: Password token
-        @return True when the user is known and the password token is correct,
+        @return: True when the user is known and the password token is correct,
         False otherwise
         '''
         # Shortcut for constant users
@@ -170,7 +209,7 @@ class UserSQLiteAuth:
         @param user: Known username (the public key of the user must in 
         the sqlite file)
         '''
-        with self._dbkeys as c:
+        with self._dbusers as c:
             row = c.execute ('''select publickey from users 
                 where username=?''' , (user,) ).fetchone()
         # If row is none, the user is unknown
