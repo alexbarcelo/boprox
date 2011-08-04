@@ -178,8 +178,22 @@ REV_MOVEFILE     = 2
 REV_DELETEFILE   = 3
 REV_ROLLEDBACK   = 4
 REV_MODIFIED     = 5
+REV_FOLDER       = 6
 
-FORBIDDEN_CHARS = ["\\",'!']
+# Most of them are windows-illegal chars, and probably it is still incomplete
+# ! is added to avoid an improbable shell-escapation in some badly done scripts
+# (better to be extra careful than mess it up, and windows forbids ? anyway) 
+FORBIDDEN_CHARS = ["\\",'!','<','>',':','"','|','?','*']
+FORBIDDEN_CHARS.extend([chr(i) for i in range(1,32)])
+
+# Side note: Client should be careful to send a POSIX path, so the client is
+# expected to strip the slashes '/'. If they do not strip them, probably 
+# strange things will happen (maybe server will search for unexistant folders) 
+
+# Windows stuff, again...
+FORBIDDEN_NAMES = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 
+    'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 
+    'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9' ]
 
 class SanitizeError(Exception):
     def __init__(self, char, msg='Found this, not allowed in context: '):
@@ -294,8 +308,9 @@ class ServerInstance():
         hack permissions), '/' and '\' characters (on the server everything
         is in unix separators), forbidden chars, hidden files and folders, etc.
         
-        @param path: String of a folder or a file. No real filesystem check is
-        done, only chars and construction.
+        @param path: String of a folder or a file.
+        @return: The sanitized version of the path. Raise a SanitizeError if
+        an error is encountered.
         '''
         for ch in FORBIDDEN_CHARS:
             if ch in path:
@@ -305,15 +320,20 @@ class ServerInstance():
         if path[0] == '/':
             return SanitizeError('\ (root)')
         path = os.path.normpath(path)
-        # Check for any hidden member (POSIX style, dot prefix)
+        # Check illegal things on each ``member'' of the path
         remains = path
         partofpath = ''
         while remains or partofpath:
             remains, partofpath = os.path.split(remains)
             # check non-emptiness, then check if has dot-prefix
-            if partofpath and partofpath[0] == '.':
+            if partofpath:
+                if partofpath[0] == '.':
                     raise SanitizeError('. (prefix)')
-                
+                if partofpath[-1] == '.' or partofpath[-1] == ' ':
+                    raise SanitizeError('`'+partofpath[-1]+"' (last character)")
+                if partofpath in FORBIDDEN_NAMES:
+                    raise SanitizeError(partofpath,'Illegal name')
+        
         #it seems that everything is ok
         return os.path.join(self._repodir, path)            
         
