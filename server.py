@@ -340,11 +340,12 @@ class ServerInstance():
         for ch in FORBIDDEN_CHARS:
             if ch in file:
                 raise SanitizeError(ch)
-            
-        if file[0] == '.':
-            raise SanitizeError('. (prefix)')
-        if file[-1] == '.' or file[-1] == ' ':
-            raise SanitizeError('`'+file[-1]+"' (last character)")
+        
+        firstch, lastch = file[0], file[-1]
+        if firstch == '.' or firstch == ' ':
+            raise SanitizeError('`'+firstch+"' (first character)")
+        if lastch == '.' or lastch == ' ':
+            raise SanitizeError('`'+lastch+"' (last character)")
         if file in FORBIDDEN_NAMES:
             raise SanitizeError(file,'Illegal name: ')
         
