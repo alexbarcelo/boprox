@@ -19,7 +19,9 @@ lowercase  = [chr(97+i) for i in range(0,26)]
 numbers    = [chr(48+i) for i in range(0,10)]
 other      = ['+','=','<','>','-','.','!','(',')','[',']','*',';','_']
 # the '/' character gives invalid URL. Also invalid '?'
-# ':' is valid (it works) but it is confusing (user:to:k:en@localhost:port)
+# ':' is valid (it works) but it is confusing:
+# a token ``to:k:en'' becomes a URL https://user:to:k:en@localhost:port)
+
 TOKENCHARS = []
 TOKENCHARS.extend(uppercase)
 TOKENCHARS.extend(lowercase)
