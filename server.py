@@ -183,7 +183,7 @@ REV_FOLDER       = 6
 # Most of them are windows-illegal chars, and probably it is still incomplete
 # ! is added to avoid an improbable shell-escapation in some badly done scripts
 # (better to be extra careful than mess it up, and windows forbids ? anyway) 
-FORBIDDEN_CHARS = ["\\",'!','<','>',':','"','|','?','*']
+FORBIDDEN_CHARS = ['/', "\\",'!','<','>',':','"','|','?','*']
 FORBIDDEN_CHARS.extend([chr(i) for i in range(1,32)])
 
 # Side note: Client should be careful to send a POSIX path, so the client is
@@ -194,6 +194,9 @@ FORBIDDEN_CHARS.extend([chr(i) for i in range(1,32)])
 FORBIDDEN_NAMES = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 
     'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 
     'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9' ]
+
+# Plus something else --posix special folders
+FORBIDDEN_NAMES.extend(['.','..'])
 
 class SanitizeError(Exception):
     def __init__(self, char, msg='Found this, not allowed in context: '):
@@ -214,7 +217,7 @@ class ServerInstance():
             self._userauth = None
         
         # debugging now!
-        self._logger = logging.getLogger('boproxd')
+        self._logger = logging.getLogger('boprox-server')
         self._logger.setLevel(logging.DEBUG)
         
         if config:
@@ -242,7 +245,8 @@ class ServerInstance():
                 c.execute('''create table if not exists 
                     files(
                         idfile integer primary key autoincrement,
-                        path text unique,
+                        path text,
+                        file text,
                         deleted boolean default 0,
                         lastrev integer
                         )
@@ -261,9 +265,9 @@ class ServerInstance():
                         )
                     ''')
         except:
-            # should do something here . . .
-            print "Should do something here - SQLite error"
-            pass
+            # Cannot continue
+            print "SQLite error"
+            raise
     
     def ping(self):
         '''
@@ -301,335 +305,48 @@ class ServerInstance():
         if self.serverParent:
             return self.serverParent.username
         return None
-    
-    def _sanitizePath(self, path):
+
+    def _isLocalPath(self, path):
         '''
-        Check for exploits and dangeros things like ".." folders (way to
-        hack permissions), '/' and '\' characters (on the server everything
-        is in unix separators), forbidden chars, hidden files and folders, etc.
+        Check if a given path is known. A path is known if either:
+          * is empty
+          * it is path1/path2 and exists a row in the database with path=path1
+            and file=path2, and the row is a directory entry
+        
+        @param path: String of the path to check
+        '''
+        if path == '':
+            return True
+        path1, path2 = os.path.split(path)
+        with self._dbfile as c:
+            row = c.execute ('select * from files where path=? and file=?',
+                (path1,path2) ).fetchone()
+        if row:
+            return True
+        
+    def _sanitizeFilename(self, path, file):
+        '''
+        Check for exploits and dangerous things, '/' and '\' characters (on the 
+        server everything is in unix separators), forbidden chars, hidden files 
+        and folders, etc.
         
         @param path: String of a folder or a file.
         @return: The sanitized version of the path. Raise a SanitizeError if
         an error is encountered.
         '''
+        if not self._isLocalPath(path):
+            raise SanitizeError (path, 'Illegal path (not in server): ')
+        
         for ch in FORBIDDEN_CHARS:
-            if ch in path:
+            if ch in file:
                 raise SanitizeError(ch)
-        if (path[0:2] == '..' or path.find('/../') < 0 or path[-2:] == '..'):
-            raise SanitizeError('..')
-        if path[0] == '/':
-            return SanitizeError('\ (root)')
-        path = os.path.normpath(path)
-        # Check illegal things on each ``member'' of the path
-        remains = path
-        partofpath = ''
-        while remains or partofpath:
-            remains, partofpath = os.path.split(remains)
-            # check non-emptiness, then check if has dot-prefix
-            if partofpath:
-                if partofpath[0] == '.':
-                    raise SanitizeError('. (prefix)')
-                if partofpath[-1] == '.' or partofpath[-1] == ' ':
-                    raise SanitizeError('`'+partofpath[-1]+"' (last character)")
-                if partofpath in FORBIDDEN_NAMES:
-                    raise SanitizeError(partofpath,'Illegal name')
-        
-        #it seems that everything is ok
-        return os.path.join(self._repodir, path)            
-        
-    def SendDelta(self, idRev, sentdelta, binchksum = None, size = 'NULL'):
-        """Send delta to server"""        
-        tsnow = datetime.now()
-        # get real checksum
-        try:
-            chksum = int.from_bytes( binchksum.data , byteorder='big' )
-        except AttributeError:
-            chksum = 'NULL'
-        
-        self._logger.debug("Receiving delta, now()=%s" , repr(tsnow) )
-        self._logger.debug("Chksum received: %s" , repr(chksum) )
-        #check if everything is ok
-        with self._conn as c:
-            self._logger.debug ( "Getting row of revisions . . ." )
-            rowRev = c.execute ( "select * from revisions where idrev=?" ,(idRev,)).fetchone()
-            self._logger.debug ( "Getting row of file information . . ." )
-            rowFile = c.execute ( "select * from files where idfile=?" ,
-                (rowRev['idfile'],) ).fetchone()
-            if rowFile['lastrev'] != idRev:
-                self._logger.info("Error: Outdated client")
-                return ERR_OUTDATED                
-            if rowFile['deleted'] == 1:
-                self._logger.info("Error: file in deleted state")
-                return ERR_DELETED
             
-            self._logger.debug ( "Inserting new revision into database . . ." )
-            try:
-                cur = c.execute ( '''insert into revisions 
-                    (idfile, timestamp, fromrev, typefrom, chksum, size, hardexist) values
-                    (?,?,?,?,?,?,0)''' , (rowRev['idfile'], tsnow , idRev, REV_MODIFIED,chksum, size ) )
-                
-                nextRev = cur.lastrowid
-            
-                c.execute ( '''update files set lastrev=? where idfile=?''' ,
-                    (nextRev , rowRev['idfile'] ) )
-            except:
-                raise
-                return ERR_SQL
+        if file[0] == '.':
+            raise SanitizeError('. (prefix)')
+        if file[-1] == '.' or file[-1] == ' ':
+            raise SanitizeError('`'+file[-1]+"' (last character)")
+        if file in FORBIDDEN_NAMES:
+            raise SanitizeError(file,'Illegal name: ')
         
-        self._logger.debug ( "Going to write the delta file" )
-        #now, save the delta
-        delta = Deltas.load(sentdelta)
-        delta.save(os.path.join(self._deltasdir,str(nextRev)))
-        
-        self._logger.debug ( "Latest revision: %s" , int(nextRev) )
-        return nextRev, tsnow
-    
-    def getDeltasSinceEvent ( self, eventType , condition , startRev ):
-        """Get all the deltas since a given "event" (sqlite column)
-        The row that satisfies the condition is NOT added to the list
-        (be careful with idrev vs fromrev)
-        Return the best error code if something goes wrong
-        """
-        # thinking in yield-ing... but if there is an error, 
-        # then everything would seem more awkward
-        # Maybe is more pytonic, and raise when needed
-        deltaHistory = [ startRev ]
-        with self._conn as c:
-            revRow = c.execute ( '''select * from revisions
-                where idrev=?''' , (startRev,) ).fetchone()
-            while revRow[eventType] != condition:
-                revRow = c.execute ( '''select * from revisions 
-                    where idrev=?''' , 
-                    (revRow['fromrev'],) ).fetchone()
-                if not revRow:
-                    # asking for impossible connexion
-                    return ERR_CANNOT
-                    
-                self._logger.debug ( 'This row %s has %s in %s' , 
-                    str(revRow['idrev']) , str(revRow[eventType]) , 
-                    eventType )
-                    
-                deltaHistory.append( revRow['idrev'] )
-        return deltaHistory
-        
-    def GetDelta(self, idRev, idFromRev):
-        """Get delta (see rsync algorithm) to jump between two revisions"""
-        
-        #if it's the easy way, we do it the easy way (most likely to hapen)
-        with self._conn as c:
-            revRow = c.execute( "select * from revisions where idrev=?" , idRev).fetchone()
-        
-        if (revRow['fromrev'] == idFromRev) and (revRow['fromtype'] == REV_MODIFIED):
-            #yes, we are lucky!
-            try:
-                delta = Deltas.open(os.path.join(self._deltasdir,str(idRev)))
-            except:
-                delta = ERR_FS
-            return delta.getXMLRPCBinary()
-        else:
-            if revRow['fromtype'] != REV_MODIFIED:
-                # asking for an inexistant delta 
-                return ERR_CANNOT
-              
-            # 1st: check that exists a chain of non-deletions between 
-            # this two revisions (save the first hardcopy for later)
-            deltaList = self.getDeltasSinceEvent ( 'idrev' , idFromRev , idRev )
-            if type(deltaList) == int:
-                return deltaList
-                
-            # 2nd: try to join everything
-            try:
-                val = deltaList.pop()
-                self._logger.debug ( "Getting delta for %s" , str(val) )
-                delta = Deltas.open(os.path.join(self._deltasdir, str(val)))
-                while deltaList:
-                    filename = os.path.join(self._deltasdir, str(deltaList.pop()))
-                    delta.joinDelta ( Deltas.open(filename) )
-            except:
-                return ERR_FS
-                    
-            # 3rd: Send delta
-            return delta.getXMLRPCBinary()
-
-    def GetMetaInfo ( self, rev , force=False):
-        """Get the metainfo (actually size and chksum) of some revision
-        
-        force = True if want to get this values (a hard copy will be done
-        if necessary). If not forced, -1 values will be returned if no 
-        hard copy exists)
-        """
-        
-        pass
-        
-    def GetLastRev(self, filepath):
-        """Get the id of the last revision of some file
-        Get it by the identificator of """
-        with self._conn as c:
-            row = c.execute ( '''select lastrev from files
-                where path=?''' , (filepath,) ).fetchone()
-        if row == None:
-            return ERR_NOTEXIST
-        return row['lastrev']
-        
-    def GetFileNews(self, timestamp):
-        """Get a list of changes since timestamp (idFile affected)"""
-        self._logger.debug('Getting news from %s' , repr(timestamp) )
-        with self._conn as c:
-            cur = c.execute ( '''select idfile, timestamp as "ts [timestamp]" 
-                from revisions order by timestamp desc''' )
-        self._logger.debug ('Cursor: %s' , repr(cur) )
-        idsChanged = set()
-        row=cur.fetchone()
-        self._logger.debug ('First row: %s' , repr(row) )
-        while row:
-            self._logger.debug ( "This row has timestamp %s (type %s), for idfile %s" , 
-                repr(row['ts']), type(row['ts']) , str(row['idfile']) )
-            if row['ts'] > timestamp:
-                idsChanged.add( row['idfile'] )
-            else:
-                break
-            row = cur.fetchone()
-        
-        self._logger.debug ( "Getting pathnames for modified files" )
-        pathList = []
-        for i in idsChanged:
-            with self._conn as c:
-                pathList.append ( c.execute ( '''select path
-                    from files where idfile=?''', (i,) ).fetchone()['path'] )
-        
-        self._logger.debug( "Changed files: %s" , repr(pathList) )
-            
-        return pathList
-        
-        
-    def MakeDir (self, path ):
-        """Create directory ``path''"""
-        return ERR_TODO
-    
-    
-    def SendNewFile (self, newfile, bindata , chksum = None, size = None):
-        """Create a NON-EXISTING file in *filepath*, with *data* contents"""
-        
-        filepath = os.path.join(self._repodir,newfile)
-        self._logger.debug ( "Receiving file %s, saving as %s" , newfile , filepath )
-        
-        ##full of bugs and security holes here! let's rock let's party
-        if os.path.exists(filepath):
-            return ERR_EXISTANT
-        try:
-            with open(filepath, "wb") as f:
-                f.write(bindata.data)
-        except:
-            #ToDo error: Not yet well-documented
-            return ERR_FS
-            
-        #now check the checksum
-        with open ( filepath , "rb" ) as f:
-            computedChecksum = adler32(f.read())
-            
-        try:
-            if int.from_bytes(chksum.data, byteorder='big') != computedChecksum:
-                return ERR_CHKSUM
-        except AttributeError:
-            pass
-    
-        computedSize = os.stat(filepath).st_size
-        if (size != None) and (computedSize != size):
-            return ERR_SIZE
-            
-        tsnow = datetime.now()
-        
-        try:
-            with self._conn as c:
-                cursor = c.execute("insert into files (path, deleted) values (?,0)", 
-                    (newfile,) )
-                idfile = cursor.lastrowid
-                
-                cursor = c.execute('''insert into revisions 
-                    ( idfile, timestamp, fromrev, typefrom, chksum, size, hardexist )
-                    values (?,?,NULL,?,?,?,1)''' , 
-                    (idfile,tsnow,REV_NEWFILE,computedChecksum,computedSize) 
-                    )
-                    
-                idrev = cursor.lastrowid
-                
-                c.execute("update files set lastrev=? where idfile=?" , 
-                    (idrev, idfile) )
-                
-        except:
-            print "Error: ", sys.exc_info()[0]
-            return ERR_SQL
-            
-        try:
-            revPath = os.path.join ( self._hardsdir ,str(idrev) )
-            self._logger.info ( "Proceeding to link %s and %s" , filepath , revPath ) 
-            os.link ( filepath ,  revPath )
-        except:
-            return ERR_FS
-        
-        # calculate here hashes for rsync algorithm
-        hashes = Hashes.eval(filepath)
-        hashes.save (os.path.join(self._hashesdir,str(idrev)))
-        
-        return idrev, tsnow
-        
-    def GetFullRevision ( self, idRev ):
-        """Get a file by its revision identificator (not necessarily
-        the most actual version of the file)"""
-        
-        self._logger.info( 'Getting full revision for %s' , str(idRev) )
-        
-        with self._conn as c:
-            row = c.execute ('''select * from revisions where
-                idrev=?''' , (idRev,) ).fetchone()
-            
-            #check if it can be the easy way
-            if row['hardexist'] != 1:
-                self._logger.debug ( 'Doing it the hard way' )
-                # hard way, let's build the hard copy
-                # search for last hard copy first
-                deltaList = self.getDeltasSinceEvent ( 'hardexist' , 1 , idRev )
-                self._logger.debug ( "(in GetFullRevision) Variable deltaList received: %s" , repr(deltaList) )
-                if type(deltaList) == int:
-                    self._logger.debug ( "deltaList is a int")
-                    return deltaList
-                
-                # join everything
-                #first throw away this, but save for later
-                hardRev = deltaList.pop()
-                self._logger.debug ( "Getting delta" )
-                try:
-                    val = str(deltaList.pop())
-                    self._logger.debug ( "  - First: %s" , val )
-                    delta = Deltas.open(os.path.join(self._deltasdir, val))
-                    while deltaList:
-                        val = str(deltaList.pop())
-                        filename = os.path.join(self._deltasdir, val)
-                        self._logger.debug ( "  - Now adding %s, at %s" , val, filename )
-                        delta.join (Deltas.open(filename))
-                except:
-                    raise
-                    return ERR_FS
-                
-                self._logger.debug ( "Empty deltalist, last value: %s" , str(val) )
-                
-                # the last one, now will have hardcopy
-                c.execute ( '''update revisions set hardexist=1
-                    where idrev=?''' , (idRev,) )
-                
-                # this line, saved from
-                row = c.execute ( '''select * from revisions 
-                    where idrev=?''' , (hardRev,) ).fetchone()
-                
-                self._logger.info ( "Creating hard revision %s from revision %s" ,
-                    idRev , hardRev )
-                
-                infile =  os.path.join(self._hardsdir,str(row['idrev']))
-                outfile = os.path.join(self._hardsdir,str(val))
-                delta.patch(infile, outfile)
-        
-        self._logger.debug ( 'Sending hard revision to client' )
-        
-        with open ( os.path.join ( self._hardsdir , str(idRev) ) , "rb" ) as f:
-            data = Binary ( f.read() )
-        return data
+        # everything seems ok, return a full path that should be usable
+        return os.path.join(self._repodir,path,file)
