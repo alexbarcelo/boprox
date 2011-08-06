@@ -194,8 +194,9 @@ class SingleRepoClient:
         update.
         
         It is quite network-intensive --much more than UpdateFromServer().
-        Recommended to use it when there are problems or when the user
-        explicitly asks for it.
+        Recommended to use it not very often (every couple of hours, when the 
+        client starts, when there are problems, when the user explicitly asks 
+        for it...)
         '''
         pass
     
