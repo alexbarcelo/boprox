@@ -19,6 +19,7 @@ import logging
 from datetime import datetime
 from zlib import adler32
 import sys
+from traceback import format_exc
 
 from deltaindustries import Hashes, Deltas
 
@@ -170,6 +171,7 @@ ERR_CANNOT   = -17
 ERR_NOTEXIST = -18
 ERR_INTERNAL = -19
 ERR_USER     = -20
+ERR_SANITIZE = -21
 
 # What can a revision come from:
 REV_NEWFILE      = 0
@@ -220,6 +222,8 @@ class ServerInstance():
         self._logger = logging.getLogger('boprox-server')
         self._logger.setLevel(logging.DEBUG)
         
+        self._errormsg = ''
+        
         if config:
             self._repodir   = config.get('Directories','repo')
             self._hashesdir = config.get('Directories','hashes')
@@ -248,6 +252,7 @@ class ServerInstance():
                         path text,
                         file text,
                         deleted boolean default 0,
+                        isfolder boolean default 0,
                         lastrev integer
                         )
                     ''')
@@ -310,20 +315,53 @@ class ServerInstance():
         '''
         Check if a given path is known. A path is known if either:
           * is empty
-          * it is path1/path2 and exists a row in the database with path=path1
-            and file=path2, and the row is a directory entry
+          * it is path1/path2 and exists a directory-entry-row in the database 
+            with path=path1 and file=path2
         
         @param path: String of the path to check
+        @return: False if it is not a local path, True if it is found on database
         '''
         if path == '':
             return True
         path1, path2 = os.path.split(path)
         with self._dbfile as c:
-            row = c.execute ('select * from files where path=? and file=?',
+            row = c.execute ('select idfile from files where path=? and file=? and isfolder=1',
                 (path1,path2) ).fetchone()
         if row:
             return True
         
+        # No path exists --not local path
+        return False
+        
+    def _safeNew (self, path, file):
+        '''
+        Special function that checks if it is safe to create a new file (regular
+        file or folder). Now it does a case check (Windows compatibility) but
+        more regular checks can be done here.
+        
+        Note that this function does not check if the file is sanitized, use
+        _sanitizeFilename for this goal.
+        
+        @param path: String of an existant path
+        @param file: String of a (expected) non-existant file or folder. This
+        function will check if it is safe to create something with this name.
+        '''
+        with self._dbfile as c:
+            cur = c.execute('select file,deleted from files where path=?',
+                (path,) )
+        
+        for row in cur:
+            if ( (row['file'].lower() == file.lower()) and
+                 (row['deleted'] == False) ):
+                # This means that an existing file windows-incompatible with 
+                # file exists
+                return False
+            
+        # No conflicting files found
+        # (remind: this could be due an invalid path is invalid 
+        #  or a not sanitized file) 
+        return True
+    
     def _sanitizeFilename(self, path, file):
         '''
         Check for exploits and dangerous things, '/' and '\' characters (on the 
@@ -351,3 +389,124 @@ class ServerInstance():
         
         # everything seems ok, return a full path that should be usable
         return os.path.join(self._repodir,path,file)
+    
+    def getErrorMsg(self):
+        return self._errormsg
+    
+    def SendNewFile (self, path, newfile, bindata , chksum = None, size = None):
+        '''
+        Create a *non-existing* file in server
+        
+        @param path: String of an *existing* valid path
+        @param newfile: String of the file to create into path
+        @param bindata: Binary contents of file
+        @param chksum: Checksum of file
+        @param size: Size of file
+        @return: Error code or raise if something goes wrong. A pair idrev and
+        timestamp of the file if everything is ok.
+        '''
+        
+        try:
+            filepath = self._sanitizeFilename(path, newfile)            
+        except SanitizeError as e:
+            self._errormsg = e.__str__()
+            return ERR_SANITIZE
+        
+        if not self._safeNew(path, newfile):
+            self._errormsg = 'Server not able to create: ' + newfile
+            return ERR_CANNOT
+        
+        self._logger.debug ( "Receiving file %s, saving at %s" , newfile , filepath )
+        
+        try:
+            with open(filepath, "wb") as f:
+                f.write(bindata.data)
+        except:
+            self._errormsg('Internal filesystem error when opening ' + filepath)
+            return ERR_FS
+        
+        # Now we have created the file locally
+        # let's check that everything is ok
+        
+        #first checksum
+        with open ( filepath , "rb" ) as f:
+            computedChecksum = adler32(f.read())
+        if chksum and (chksum != computedChecksum):
+            self._errormsg('Checksums do not match --rolled back')
+            os.remove(filepath)
+            return ERR_CHKSUM
+        
+        #then size
+        computedSize = os.stat(filepath).st_size
+        if size and (computedSize != size):
+            self._errormsg('Size do not match. Local size: '+ str(computedSize)
+                + ' --rolled back')
+            os.remove(filepath)
+            return ERR_SIZE
+        
+        tsnow = datetime.now()
+        
+        with self._conn as c:
+            cursor = c.execute('''insert into files 
+                (path, file, deleted) values (?,?,0)''', (path, newfile) )
+            idfile = cursor.lastrowid
+            cursor = c.execute('''insert into revisions 
+                ( idfile, timestamp, fromrev, typefrom, chksum, size, hardexist )
+                values (?,?,NULL,?,?,?,1)''' , 
+                (idfile,tsnow,REV_NEWFILE,computedChecksum,computedSize) 
+                )                    
+            idrev = cursor.lastrowid
+            c.execute("update files set lastrev=? where idfile=?" , 
+                (idrev, idfile) )
+        
+        revPath = os.path.join ( self._hardsdir ,str(idrev) )
+        self._logger.info ( "Proceeding to link %s and %s" , filepath , revPath ) 
+        os.link ( filepath ,  revPath )
+        
+        # calculate here hashes for rsync algorithm
+        hashes = Hashes.eval(filepath)
+        hashes.save (os.path.join(self._hashesdir,str(idrev)))
+        
+        return idrev, tsnow
+    
+    def GetFileNews(self, timestamp):
+        '''Get a list of changes since timestamp.
+        
+        @param timestamp: Timestamp of last change. The server will look for 
+        all newer entries in the database (revisions table).
+        @return: A list of tuples (path,file) of every changed file.
+        '''
+        self._logger.debug('Getting news from %s' , repr(timestamp) )
+        
+        # open connection and start working
+        with self._conn as c:
+            # first, simple iteration ...
+            cur = c.execute ( '''select idfile, timestamp as "ts [timestamp]" 
+                from revisions order by timestamp desc''' )
+            self._logger.debug ('Cursor: %s' , repr(cur) )
+            # ... and save every changed id
+            idsChanged = set()
+            for row in cur:
+                self._logger.debug ( "Row with timestamp %s for idfile %s",
+                    repr(row['ts']), type(row['ts']) , str(row['idfile']) )
+                if row['ts'] > timestamp:
+                    idsChanged.add( row['idfile'] )
+                else:
+                    break
+        
+            self._logger.debug ( "Getting pathnames for modified files" )
+            pathList = []
+            for i in idsChanged:
+                with self._conn as c:
+                    try:
+                        row = c.execute ( '''select path,file,
+                        from files where idfile=?''', (i,) ).fetchone()
+                        pathList.append( (row['path'], row['file']) )
+                    except AttributeError, KeyError:
+                        self._errormsg = ( 'Internal error --incoherent database\n' +
+                            'Exception traceback:\n' + format_exc() )
+                        return ERR_INTERNAL
+        
+        self._logger.debug( "Changed files: %s" , repr(pathList) )
+            
+        return pathList

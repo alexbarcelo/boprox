@@ -137,107 +137,11 @@ Created on Aug 5, 2011
             return ERR_NOTEXIST
         return row['lastrev']
         
-    def GetFileNews(self, timestamp):
-        """Get a list of changes since timestamp (idFile affected)"""
-        self._logger.debug('Getting news from %s' , repr(timestamp) )
-        with self._conn as c:
-            cur = c.execute ( '''select idfile, timestamp as "ts [timestamp]" 
-                from revisions order by timestamp desc''' )
-        self._logger.debug ('Cursor: %s' , repr(cur) )
-        idsChanged = set()
-        row=cur.fetchone()
-        self._logger.debug ('First row: %s' , repr(row) )
-        while row:
-            self._logger.debug ( "This row has timestamp %s (type %s), for idfile %s" , 
-                repr(row['ts']), type(row['ts']) , str(row['idfile']) )
-            if row['ts'] > timestamp:
-                idsChanged.add( row['idfile'] )
-            else:
-                break
-            row = cur.fetchone()
-        
-        self._logger.debug ( "Getting pathnames for modified files" )
-        pathList = []
-        for i in idsChanged:
-            with self._conn as c:
-                pathList.append ( c.execute ( '''select path
-                    from files where idfile=?''', (i,) ).fetchone()['path'] )
-        
-        self._logger.debug( "Changed files: %s" , repr(pathList) )
-            
-        return pathList
-        
-        
     def MakeDir (self, path ):
         """Create directory ``path''"""
         return ERR_TODO
     
     
-    def SendNewFile (self, newfile, bindata , chksum = None, size = None):
-        """Create a NON-EXISTING file in *filepath*, with *data* contents"""
-        
-        filepath = os.path.join(self._repodir,newfile)
-        self._logger.debug ( "Receiving file %s, saving as %s" , newfile , filepath )
-        
-        ##full of bugs and security holes here! let's rock let's party
-        if os.path.exists(filepath):
-            return ERR_EXISTANT
-        try:
-            with open(filepath, "wb") as f:
-                f.write(bindata.data)
-        except:
-            #ToDo error: Not yet well-documented
-            return ERR_FS
-            
-        #now check the checksum
-        with open ( filepath , "rb" ) as f:
-            computedChecksum = adler32(f.read())
-            
-        try:
-            if int.from_bytes(chksum.data, byteorder='big') != computedChecksum:
-                return ERR_CHKSUM
-        except AttributeError:
-            pass
-    
-        computedSize = os.stat(filepath).st_size
-        if (size != None) and (computedSize != size):
-            return ERR_SIZE
-            
-        tsnow = datetime.now()
-        
-        try:
-            with self._conn as c:
-                cursor = c.execute("insert into files (path, deleted) values (?,0)", 
-                    (newfile,) )
-                idfile = cursor.lastrowid
-                
-                cursor = c.execute('''insert into revisions 
-                    ( idfile, timestamp, fromrev, typefrom, chksum, size, hardexist )
-                    values (?,?,NULL,?,?,?,1)''' , 
-                    (idfile,tsnow,REV_NEWFILE,computedChecksum,computedSize) 
-                    )
-                    
-                idrev = cursor.lastrowid
-                
-                c.execute("update files set lastrev=? where idfile=?" , 
-                    (idrev, idfile) )
-                
-        except:
-            print "Error: ", sys.exc_info()[0]
-            return ERR_SQL
-            
-        try:
-            revPath = os.path.join ( self._hardsdir ,str(idrev) )
-            self._logger.info ( "Proceeding to link %s and %s" , filepath , revPath ) 
-            os.link ( filepath ,  revPath )
-        except:
-            return ERR_FS
-        
-        # calculate here hashes for rsync algorithm
-        hashes = Hashes.eval(filepath)
-        hashes.save (os.path.join(self._hashesdir,str(idrev)))
-        
-        return idrev, tsnow
         
     def GetFullRevision ( self, idRev ):
         """Get a file by its revision identificator (not necessarily
