@@ -207,6 +207,13 @@ class SanitizeError(Exception):
     def __str__(self):
         return self.msg + repr(self.char)
         
+def wincase_callable(a,b):
+    # We assume everything is UTF-8 in the database (let the raise go up)
+    x = unicode(a,'UTF-8')
+    y = unicode(b,'UTF-8')
+    # and compare it case-insensitive
+    return cmp (x.lower(), y.lower())
+        
 class ServerInstance():
     def __init__(self, serverParent = None, config = None):
         import string
@@ -243,6 +250,9 @@ class ServerInstance():
             self._conn = sqlite3.connect(self._dbfile, 
                 detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
             self._conn.row_factory = sqlite3.Row
+            
+            # To enable case-insensitive in more-than-ascii (windows homage)
+            self._conn.create_collation('wincase', wincase_callable )
 
             # create things if not already exists
             with self._conn as c:
@@ -325,8 +335,10 @@ class ServerInstance():
             return True
         path1, path2 = os.path.split(path)
         with self._dbfile as c:
-            row = c.execute ('select idfile from files where path=? and file=? and isfolder=1',
-                (path1,path2) ).fetchone()
+            row = c.execute ('''select idfile from files where
+                path=? collate wincase and
+                file=? collate wincase and
+                isfolder=1''', (path1,path2)).fetchone()
         if row:
             return True
         
@@ -336,8 +348,7 @@ class ServerInstance():
     def _safeNew (self, path, file):
         '''
         Special function that checks if it is safe to create a new file (regular
-        file or folder). Now it does a case check (Windows compatibility) but
-        more regular checks can be done here.
+        file or folder). See the collation in __init__ and wincase_callabe.
         
         Note that this function does not check if the file is sanitized, use
         _sanitizeFilename for this goal.
@@ -347,14 +358,12 @@ class ServerInstance():
         function will check if it is safe to create something with this name.
         '''
         with self._dbfile as c:
-            cur = c.execute('select file,deleted from files where path=?',
-                (path,) )
+            cur = c.execute('''select deleted from files where 
+                path=? collate wincase and
+                file=? collate wincase''', (path,file))
         
         for row in cur:
-            if ( (row['file'].lower() == file.lower()) and
-                 (row['deleted'] == False) ):
-                # This means that an existing file windows-incompatible with 
-                # file exists
+            if row['deleted'] == False:
                 return False
             
         # No conflicting files found
