@@ -519,3 +519,63 @@ class ServerInstance():
         self._logger.debug( "Changed files: %s" , repr(pathList) )
             
         return pathList
+
+    def SendDelta(self, idRev, sentdelta, chksum = None, size = 'NULL'):
+        '''
+        Send a delta (see rsync algorithm) to server
+        
+        @param idRev: The identifier of the origin revision
+        @param sentdelta: Binary of the delta
+        @param chksum: Checksum of the file (not the delta)
+        @param size: Size of the file (not the delta)
+        @return: Pair of the identifier of the actual revision (once applied
+        this delta) and the server timestamp of this file.
+        '''        
+        tsnow = datetime.now()
+        # get real checksum
+        self._logger.debug("Receiving delta, now()=%s" , repr(tsnow) )
+        self._logger.debug("Chksum received: %s" , repr(chksum) )
+
+        #check if everything is ok
+        with self._conn as c:
+            self._logger.debug ( "Getting row of revisions . . ." )
+            rowRev = c.execute ( "select * from revisions where idrev=?" ,
+                (idRev,)).fetchone()
+            if not rowRev:
+                self._errormsg('Unknown revision')
+                return ERR_NOTEXIST
+            self._logger.debug ( "Getting row of file information . . ." )
+            rowFile = c.execute ( "select * from files where idfile=?" ,
+                (rowRev['idfile'],) ).fetchone()
+            if not rowFile:
+                self._errormsg ('Data not found in the database, check file existance')
+                return ERR_NOTEXIST
+            
+            # Basic checks
+            if rowFile['lastrev'] != idRev:
+                self._errormsg ("Outdated client: not the last revision")
+                return ERR_OUTDATED
+            if rowFile['deleted'] == 1:
+                self._errormsg("File is deleted, cannot add revisions to it")
+                return ERR_DELETED
+            if rowFile['isfolder']:
+                self._errormsg('The file is a folder, cannot add revisions to it')
+                return ERR_CANNOT
+            
+            # Now do really something
+            self._logger.debug ( "Inserting new revision into database . . ." )
+            cur = c.execute ( '''insert into revisions 
+                (idfile, timestamp, fromrev, typefrom, chksum, size, hardexist) 
+                values (?,?,?,?,?,?,0)''' , 
+                (rowRev['idfile'], tsnow, idRev, REV_MODIFIED, chksum, size ) )
+            nextRev = cur.lastrowid
+            c.execute ( '''update files set lastrev=? where idfile=?''' ,
+                (nextRev , rowRev['idfile'] ) )
+            
+        self._logger.debug ( "Going to write the delta file" )
+        #save the delta
+        delta = Deltas.load(sentdelta)
+        delta.save(os.path.join(self._deltasdir,str(nextRev)))
+        
+        self._logger.debug ( "Latest revision: %s" , int(nextRev) )
+        return nextRev, tsnow

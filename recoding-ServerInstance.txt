@@ -3,52 +3,6 @@ Created on Aug 5, 2011
 
 @author: marius
 '''
-    def SendDelta(self, idRev, sentdelta, binchksum = None, size = 'NULL'):
-        """Send delta to server"""        
-        tsnow = datetime.now()
-        # get real checksum
-        try:
-            chksum = int.from_bytes( binchksum.data , byteorder='big' )
-        except AttributeError:
-            chksum = 'NULL'
-        
-        self._logger.debug("Receiving delta, now()=%s" , repr(tsnow) )
-        self._logger.debug("Chksum received: %s" , repr(chksum) )
-        #check if everything is ok
-        with self._conn as c:
-            self._logger.debug ( "Getting row of revisions . . ." )
-            rowRev = c.execute ( "select * from revisions where idrev=?" ,(idRev,)).fetchone()
-            self._logger.debug ( "Getting row of file information . . ." )
-            rowFile = c.execute ( "select * from files where idfile=?" ,
-                (rowRev['idfile'],) ).fetchone()
-            if rowFile['lastrev'] != idRev:
-                self._logger.info("Error: Outdated client")
-                return ERR_OUTDATED                
-            if rowFile['deleted'] == 1:
-                self._logger.info("Error: file in deleted state")
-                return ERR_DELETED
-            
-            self._logger.debug ( "Inserting new revision into database . . ." )
-            try:
-                cur = c.execute ( '''insert into revisions 
-                    (idfile, timestamp, fromrev, typefrom, chksum, size, hardexist) values
-                    (?,?,?,?,?,?,0)''' , (rowRev['idfile'], tsnow , idRev, REV_MODIFIED,chksum, size ) )
-                
-                nextRev = cur.lastrowid
-            
-                c.execute ( '''update files set lastrev=? where idfile=?''' ,
-                    (nextRev , rowRev['idfile'] ) )
-            except:
-                raise
-                return ERR_SQL
-        
-        self._logger.debug ( "Going to write the delta file" )
-        #now, save the delta
-        delta = Deltas.load(sentdelta)
-        delta.save(os.path.join(self._deltasdir,str(nextRev)))
-        
-        self._logger.debug ( "Latest revision: %s" , int(nextRev) )
-        return nextRev, tsnow
     
     def getDeltasSinceEvent ( self, eventType , condition , startRev ):
         """Get all the deltas since a given "event" (sqlite column)
