@@ -334,7 +334,7 @@ class ServerInstance():
         if path == '':
             return True
         path1, path2 = os.path.split(path)
-        with self._dbfile as c:
+        with self._conn as c:
             row = c.execute ('''select idfile from files where
                 path=? collate wincase and
                 file=? collate wincase and
@@ -357,7 +357,7 @@ class ServerInstance():
         @param file: String of a (expected) non-existant file or folder. This
         function will check if it is safe to create something with this name.
         '''
-        with self._dbfile as c:
+        with self._conn as c:
             cur = c.execute('''select deleted from files where 
                 path=? collate wincase and
                 file=? collate wincase''', (path,file))
