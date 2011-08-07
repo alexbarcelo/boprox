@@ -28,9 +28,12 @@ TOKENCHARS.extend(lowercase)
 TOKENCHARS.extend(numbers)
 TOKENCHARS.extend(other)
 
-READ =  0x01
-WRITE = 0x02
-DELEG = 0x04
+BASEMASK   =  0x03
+READ       =  0x01 
+WRITE      =  0x02
+DELEGMASK  =  0x0C
+DELEGREAD  =  0x04
+DELEGWRITE =  0x08
 
 class UserSQLiteAuth:
     '''
@@ -92,8 +95,30 @@ class UserSQLiteAuth:
         @param idperm: Identifier of the permissions being checked
         @return: True if the user can do that, false otherwise
         '''
-        pass
-    
+        with self._dbusers as c:
+            cur = c.execute ('''select path,permcode from permissions 
+                where username=?''' , (user,) ) 
+        
+        BaseChecked  = False
+        DelegChecked = False
+        
+        for row in cur:
+            # First check if the path in the row is a subfolder of asked path
+            if row['path'] in path:
+                # Check that this (or any previous one) has enough base permissions
+                if ( not BaseChecked and 
+                     idperm & BASEMASK  <= row['perm'] & BASEMASK):
+                    BaseChecked = True
+                # Check that this (or any previous one) has enough delegation permissions
+                if ( not DelegChecked and
+                     idperm & DELEGMASK <= row['perm'] & DELEGMASK ):
+                    DelegChecked = True
+                # If at this point we have enough permissions, then can return
+                if DelegChecked and BaseChecked:
+                    return True
+        # Couldn't found enough permissions in the database for this user and path
+        return False
+        
     def setTimeout (self, timeout):
         '''
         Set the timeout of the tokens. Default is -1 (no timeout).
