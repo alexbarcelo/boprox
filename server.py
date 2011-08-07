@@ -20,6 +20,7 @@ from datetime import datetime
 from zlib import adler32
 import sys
 from traceback import format_exc
+import auth
 
 from deltaindustries import Hashes, Deltas
 
@@ -172,6 +173,7 @@ ERR_NOTEXIST = -18
 ERR_INTERNAL = -19
 ERR_USER     = -20
 ERR_SANITIZE = -21
+ERR_NOTAUTH  = -22
 
 # What can a revision come from:
 REV_NEWFILE      = 0
@@ -399,6 +401,19 @@ class ServerInstance():
         # everything seems ok, return a full path that should be usable
         return os.path.join(self._repodir,path,file)
     
+    def _checkPerms (self, path, idperm):
+        user = self._getUsername()
+        if not user:
+            self._errormsg('Not authenticated')
+            return ERR_NOTAUTH
+        if not self._userauth:
+            self._errormsg('No authentication mecanism on server')
+            return  ERR_INTERNAL
+        if not self._userauth.checkPerm(user, path, idperm):
+            self._errormsg('User %s not authorized to do that' % (user,))
+            return ERR_NOTAUTH
+        return 0
+    
     def getErrorMsg(self):
         return self._errormsg
     
@@ -414,6 +429,9 @@ class ServerInstance():
         @return: Error code or raise if something goes wrong. A pair idrev and
         timestamp of the file if everything is ok.
         '''
+        ret = self._checkPerms(path, auth.WRITE)
+        if ret < 0:
+            return ret
         
         try:
             filepath = self._sanitizeFilename(path, newfile)            
@@ -484,7 +502,15 @@ class ServerInstance():
         @param timestamp: Timestamp of last change. The server will look for 
         all newer entries in the database (revisions table).
         @return: A list of tuples (path,file) of every changed file.
+        
+        Note: This function is highly inefficient for multiuser servers. This 
+        can be improved a lot. TODO
         '''
+        # Check that is authenticated
+        if not self._getUsername():
+            self._errormsg('Should be authenticated to do that')
+            return ERR_NOTAUTH
+        
         self._logger.debug('Getting news from %s' , repr(timestamp) )
         
         # open connection and start working
@@ -509,12 +535,16 @@ class ServerInstance():
                 with self._conn as c:
                     try:
                         row = c.execute ( '''select path,file,
-                        from files where idfile=?''', (i,) ).fetchone()
-                        pathList.append( (row['path'], row['file']) )
+                            from files where idfile=?''', (i,) ).fetchone()
+                        # only return information if the user has read permissions
+                        # on that folder
+                        if self._checkPerms(row['path'], auth.READ) == 0:
+                            pathList.append( (row['path'], row['file']) )
                     except AttributeError, KeyError:
                         self._errormsg = ( 'Internal error --incoherent database\n' +
                             'Exception traceback:\n' + format_exc() )
                         return ERR_INTERNAL
+                    
         
         self._logger.debug( "Changed files: %s" , repr(pathList) )
             
@@ -533,8 +563,8 @@ class ServerInstance():
         '''        
         tsnow = datetime.now()
         # get real checksum
-        self._logger.debug("Receiving delta, now()=%s" , repr(tsnow) )
-        self._logger.debug("Chksum received: %s" , repr(chksum) )
+        self._logger.debug("Receiving delta, now()=%s", repr(tsnow) )
+        self._logger.debug("Chksum received: %s", repr(chksum) )
 
         #check if everything is ok
         with self._conn as c:
@@ -548,8 +578,11 @@ class ServerInstance():
             rowFile = c.execute ( "select * from files where idfile=?" ,
                 (rowRev['idfile'],) ).fetchone()
             if not rowFile:
-                self._errormsg ('Data not found in the database, check file existance')
+                self._errormsg ('Data not found in the database, check revision existance')
                 return ERR_NOTEXIST
+            
+            # Authentication check
+            self._checkPerms(rowFile['path'], auth.WRITE)
             
             # Basic checks
             if rowFile['lastrev'] != idRev:

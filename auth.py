@@ -28,6 +28,10 @@ TOKENCHARS.extend(lowercase)
 TOKENCHARS.extend(numbers)
 TOKENCHARS.extend(other)
 
+READ =  0x01
+WRITE = 0x02
+DELEG = 0x04
+
 class UserSQLiteAuth:
     '''
     Class to check user permissions --SQLite backend
@@ -78,6 +82,17 @@ class UserSQLiteAuth:
                 timestamp timestamp,
                 token text
                 )''')
+            
+    def checkPerm(self, user, path, idperm):
+        '''
+        Check the user permissions
+        
+        @param user: Name of the user
+        @param path: String of the folder to be checked
+        @param idperm: Identifier of the permissions being checked
+        @return: True if the user can do that, false otherwise
+        '''
+        pass
     
     def setTimeout (self, timeout):
         '''
