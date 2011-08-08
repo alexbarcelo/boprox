@@ -63,18 +63,21 @@ class ClientError(Exception):
 
 
 class SingleRepoClient:
-    def __init__(self, host, port, username, key, dbfile, localpath, remotepath = '.'):
+    def __init__(self, host, port, username, dbfile, localpath, 
+        remotepath = '.', key=None, permatoken=None):
         '''
-        Create a sort-of API to connect with one server (one repository)
+        Create a sort-of API to connect with one server (one repository). One
+        and only one of key and permatoken parameters must not be None.
         
         @param host: Host to connect
         @param port: Port to connect
         @param username: Name to authenticate
-        @param key: RSA key used for authentication
         @param dbfile: sqlite database file to track files and revisions
         @param localpath: Local path used to synchronize
         @param remotepath: Remote path to synchronize with (default: .) --useful
         for shared resources or multiuser servers.
+        @param key: RSA key used for authentication
+        @param permatoken: Password (considered a ``permanent token'')
         '''
 
         ######################################################
@@ -115,12 +118,26 @@ class SingleRepoClient:
             
             def __getattr__(self, name):
                 return _Method(self.__request, name)
+            
+        # Basic check of authentication mechanism
+        if not key and not permatoken:
+            raise TypeError('Either key or permatoken must be given')
+        
+        if not permatoken:
+            # Do it for key
+            self._key = key
+            self._permatoken = False
+            self._token = None
+        else:
+            # We have permatoken
+            self._key = None
+            self._permatoken = True
+            self._token = permatoken
 
         # initialize values
         self._host = host
         self._port = port
         self._username = username
-        self._key = key
         self._localpath  = localpath
         self._remotepath = remotepath
         
@@ -161,8 +178,11 @@ class SingleRepoClient:
         self._RemoteCaller = CallProxifier()
 
     def _requestToken(self):
-        etoken = self._anonConn.requestToken(self._username)
-        self._token = rsa.decrypt(etoken, self._key)
+        # If we have permatoken, then it is in _token and we do nothing
+        if self._permatoken == False:
+            # Otherwise, do the RSA standard procedure with the server.
+            etoken = self._anonConn.requestToken(self._username)
+            self._token = rsa.decrypt(etoken, self._key)
         self._authURL = "https://%s:%s@%s:%s" % (self._username, self._token, 
             self._host, str(self._port) )
         self._authConn = ServerProxy(self._authURL)

@@ -17,7 +17,18 @@ if __name__ == '__main__':
     print "Token received from server:", firstrepo._token
     
     print firstrepo.ping()
-    sleep(5)
-    print firstrepo.ping()
     
-    print "Last token:" , firstrepo._token
+    ## This test worked ok, commenting it now to speed-up things
+    #sleep(5)
+    #print firstrepo.ping()
+    #
+    #print "Last token:" , firstrepo._token
+    
+    print "Now using admin account"
+    
+    adminrepo = client.SingleRepoClient(host='localhost', port=1356,
+        username='admin', permatoken='IChangedIt', dbfile='./clientdb.sqlite',
+        localpath='./repoclient')
+    
+    print "Doing an admin-ping"
+    print adminrepo.ping()
