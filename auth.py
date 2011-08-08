@@ -108,7 +108,7 @@ class UserSQLiteAuth:
         
         for row in cur:
             # First check if the path in the row is a subfolder of asked path
-            if row['path'] in path:
+            if path.startswith(row['path']):
                 # Check that this (or any previous one) has enough base permissions
                 if ( not BaseChecked and 
                      idperm & BASEMASK  <= row['perm'] & BASEMASK):
