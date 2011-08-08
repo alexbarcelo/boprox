@@ -154,10 +154,10 @@ class UserSQLiteAuth:
         '''
         Get the maximum int of permissions between the two parameters. 
         Return it.
+        
+        (Uber simple function, but in case the implementation changes...)
         '''
-        # TODO
-        # Do something about int and permissions codification
-        pass
+        return perm1 | perm2
         
     def GetPermissions (self, user, dirpath):
         '''
@@ -176,7 +176,7 @@ class UserSQLiteAuth:
             cur = c.execute ('select * from permissions where user=?', (user,))
         currperm = 0
         for row in cur:
-            if dirpath == os.path.commonprefix([dirpath, row['path']]):
+            if dirpath.startswith(row['path']):
                 self._getMaxPermissions(currperm, row['permcode'])
         return currperm
         
