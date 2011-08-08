@@ -95,6 +95,10 @@ class UserSQLiteAuth:
         @param idperm: Identifier of the permissions being checked
         @return: True if the user can do that, false otherwise
         '''
+        # Hardcoded admin
+        if user == 'admin':
+            return True
+        
         with self._dbusers as c:
             cur = c.execute ('''select path,permcode from permissions 
                 where username=?''' , (user,) ) 
@@ -116,7 +120,7 @@ class UserSQLiteAuth:
                 # If at this point we have enough permissions, then can return
                 if DelegChecked and BaseChecked:
                     return True
-        # Couldn't found enough permissions in the database for this user and path
+        # Couldn't find enough permissions in the database for this user and path
         return False
         
     def setTimeout (self, timeout):
