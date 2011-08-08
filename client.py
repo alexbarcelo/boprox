@@ -13,6 +13,7 @@ import os.path
 from datetime import datetime
 
 import logging
+from foolscap.test.test_appserver import CLI
 
 def getKeyFromPEM(PEMdata):
     '''
@@ -47,19 +48,23 @@ def getKeyFromPEMfile(filename):
     return None
 
 class ClientError(Exception):
-    def __init__(self, retcode='-1', file=None, call=None):
+    def __init__(self, retcode='-1', call=None):
         self.retcode = retcode
         self.file = file
         self.call = call
+        # This variable is for a catch-set-reraise procedure
+        self.moreinfo = None 
+
     def __str__(self):
         str = '\nError in client communication with server\n'
         str+= '-----------------------------------------\n'
         str+= 'Return code: ' + self.retcode
-        if self.file:
-            str += '\nFile being edited: ' + self.file
         if self.call:
             str += '\nRemote call in progress: ' + self.call
+        if self.moreinfo:
+            str+= '\n-----------------------------------------\n'+self.moreinfo
         return str
+
 
 
 class SingleRepoClient:
@@ -99,13 +104,12 @@ class SingleRepoClient:
             def __call__(myself, *args):
                 try:
                     ret = myself.__send(myself.__name, args)
-                    return ret
                 except ProtocolError:
                     del (self._authConn)
                     self._requestToken()
                     # if it fails here, then let the raise "go up"
                     ret = myself.__send(myself.__name, args)
-                    return ret
+                return ret
         
         # Some magic transparent proxy for remote calls
         class CallProxifier:
@@ -114,7 +118,9 @@ class SingleRepoClient:
             
             def __request(myself, methodname, params):
                 func = getattr(self._authConn, methodname)
-                return func(*params)
+                ret = func(*params)
+                if isinstance(ret, int) and ret < 0:
+                    raise ClientError(ret, methodname)
             
             def __getattr__(self, name):
                 return _Method(self.__request, name)
