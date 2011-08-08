@@ -837,8 +837,35 @@ class ServerInstance():
     def MakeDir (self, path, folder ):
         '''
         Create directory
+        
         @param path: Path where to create
         @param folder: Name of the folder to create
-        @return: Identifier of the folder revision
+        @return: Identifier of the folder revision and timestamp from server
         '''
-        return ERR_TODO
+        ret = self._checkPerms(path, auth.WRITE)
+        if ret < 0:
+            return ret
+        try:
+            folderpath = self._sanitizeFilename(path, folder)            
+        except SanitizeError as e:
+            self._errormsg = e.__str__()
+            return ERR_SANITIZE
+        # Safely ready to create it
+        tsnow = datetime.now()
+        try:
+            os.mkdir(folderpath)
+        except:
+            self._errormsg('Filesystem error when creating folder')
+            return ERR_FS
+        with self._conn as c:
+            cursor = c.execute('''insert into files 
+                (path, file, deleted, isfolder) 
+                values (?,?,0,1)''', (path, folder) )
+            idfile = cursor.lastrowid
+            cursor = c.execute('''insert into revisions 
+                ( idfile, timestamp, fromrev, typefrom, hardexist )
+                values (?,?,NULL,?,NULL)''' , (idfile,tsnow,REV_FOLDER) )                    
+            idrev = cursor.lastrowid
+            c.execute("update files set lastrev=? where idfile=?" , 
+                (idrev, idfile) )
+        return idrev, tsnow
