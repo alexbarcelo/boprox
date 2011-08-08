@@ -417,15 +417,14 @@ class ServerInstance():
     def _getDeltasSinceEvent ( self, eventType , condition , startRev ):
         '''
         Get all the deltas since a given "event" (sqlite column)
-        The row that satisfies the condition is NOT added to the list
+        The row that satisfies the condition is added to the list
         (be careful with idrev vs fromrev).
         
         @param eventType: String containing the name of a sqlite column.
-        @param condition: Condition to check in the column. Remind that the
-        row that verifies this condition is not added.
-        @param startRev: Revision to start with (newer revision)  
+        @param condition: Condition to check in the column.
+        @param startRev: Revision to start with (newer revision).
         @return: the best error code if something goes wrong, otherwise returns
-        a list of delta identifiers
+        the list of delta identifiers
         '''
         # thinking in a yield-ing function maybe?
         # but the chain checker should be done before starting,
@@ -447,10 +446,7 @@ class ServerInstance():
                     return ERR_CANNOT
                 self._logger.debug ( 'This row %s has %s in %s' , 
                     str(revRow['idrev']) , str(revRow[eventType]) , eventType )
-        if not deltaHistory:
-            #emtpy, no chain exists
-            self._errormsg('Empty chain, not a delta-event-chain. Check file history')
-            return ERR_CANNOT
+        deltaHistory.append(revRow['idrev'])
         return deltaHistory
     
     def getErrorMsg(self):
@@ -692,7 +688,7 @@ class ServerInstance():
             row = c.execute ("select path,isfolder from files where idfile=?" ,
                 (revRow['idfile']) ).fetchone()
             if not row:
-                self._errormsg('Unconsistent files table (database error)')
+                self._errormsg('Inconsistent files table (database error)')
                 return ERR_INTERNAL
             if row['isfolder']:
                 self._errormsg('Cannot get a delta for a folder')
@@ -712,7 +708,7 @@ class ServerInstance():
         else:
             # 1st: check that exists a chain of non-deletions between 
             # this two revisions (save the first hardcopy for later)
-            deltaList = self._getDeltasSinceEvent ( 'idrev' , idFromRev , idRev )
+            deltaList = self._getDeltasSinceEvent ( 'fromrev' , idFromRev , idRev )
             if type(deltaList) == int:
                 return deltaList
                 
@@ -725,3 +721,124 @@ class ServerInstance():
             
             # 3rd: Send delta
             return delta.getXMLRPCBinary()
+        
+    def GetFullRevision ( self, idRev ):
+        '''
+        Get a full file (not a delta) by its revision identificator. The server
+        can be asked any revision (not necessarily the most recent).
+        
+        @param idRev: Revision that the client asks for
+        @return: Error code or Binary information of the file
+        '''
+        self._logger.info( 'Getting full revision for %s' , str(idRev) )
+        
+        with self._conn as c:
+            row = c.execute ('select * from revisions where idrev=?' , 
+                (idRev,) ).fetchone()
+            if not row:
+                self._errormsg('Unknown revision')
+                return ERR_NOTEXIST
+            # check permissions
+            fileRow = c.execute('select path from files where idfile=?' ,
+                (row['idfile'],) ).fetchone()
+            if not fileRow:
+                self._errormsg('Inconsistent files table (database error)')
+                return ERR_INTERNAL
+            ret = self._checkPerms(fileRow['path'], auth.READ)
+            if ret < 0:
+                return ret
+            # check if this operation can be the easy way
+            if row['hardexist'] != 1:
+                self._logger.debug ( 'Doing it the hard way' )
+                deltaList = self.getDeltasSinceEvent ( 'hardexist' , 1 , idRev )
+                self._logger.debug ( "(in GetFullRevision) Variable deltaList received: %s" , repr(deltaList) )
+                if type(deltaList) == int:
+                    self._errormsg('Could not create internal chain of deltas. Internal error: %s' 
+                        % str(deltaList) )
+                    return ERR_INTERNAL
+                
+                # join everything
+                # first throw away this, but save for later
+                hardRev = deltaList.pop()
+                self._logger.debug ( "Generating internal delta" )
+                try:
+                    listoffiles = [os.path.join(self._deltasdir, str(i)) for i in deltaList]
+                    delta = Deltas.multiOpen(listoffiles)
+                except:
+                    return ERR_FS
+                # the last one, now will have hardcopy
+                c.execute ( '''update revisions set hardexist=1
+                    where idrev=?''' , (idRev,) )
+                
+                # this line, saved from
+                row = c.execute ( '''select * from revisions 
+                    where idrev=?''' , (hardRev,) ).fetchone()
+                self._logger.info ( "Creating hard revision %s from revision %s" ,
+                    idRev , hardRev )
+                infile =  os.path.join(self._hardsdir,str(hardRev))
+                outfile = os.path.join(self._hardsdir,str(idRev))
+                delta.patch(infile, outfile)        
+        self._logger.debug ( 'Sending hard revision to client' )
+        with open ( os.path.join ( self._hardsdir , str(idRev) ) , "rb" ) as f:
+            return Binary ( f.read() )
+
+    def GetMetaInfo ( self, idrev, force=False):
+        '''
+        Get the metainfo of some revision.
+        
+        @param idrev: The identifier of the revision.
+        @param force: If a force GetMetaInfo is done (force=True) then the 
+        server will do a hard copy (if does not exist) and physically check
+        this values. A write permission is needed in this case. Default False.
+        @return: The metainfo (actually return a pair size,checksum). Size
+        and/or checksum may be None if not forced.
+        '''
+        with self._conn as c:
+            row = c.execute('select * from revisions where idrev=?', 
+                (idrev,) ).fetchone()
+            if not row:
+                self._errormsg('Unknown revision')    
+                return ERR_NOTEXIST
+            fileRow = c.execute ('select path from files where idfile=?',
+                (row['path'],) ).fetchone()
+            if not fileRow:
+                self._errormsg('Inconsistent files table (database error)')
+                return ERR_INTERNAL
+
+        if force == False:
+            ret = self._checkPerms(fileRow['path'], auth.READ)
+            if ret < 0:
+                return ret
+            return row['size'], row['chksum']
+        else:
+            ret = self._checkPerms(fileRow['path'], auth.WRITE)
+            if ret < 0:
+                return ret
+            return ERR_TODO
+        
+    def GetLastRev(self, path, file):
+        '''
+        Get the identifier of the last revision of some file
+        @param path: Path of the file
+        @param file: Filename
+        @return: identifier of the last revision of previous file
+        '''
+        ret = self._checkPerms(path, auth.READ)
+        if ret < 0:
+            return ret
+        with self._conn as c:
+            row = c.execute ( 'select lastrev from files where path=?,file=?', 
+                (path,file) ).fetchone()
+        if not row:
+            self._errormsg('Unknown file')
+            return ERR_NOTEXIST
+        return row['lastrev']
+        
+    def MakeDir (self, path, folder ):
+        '''
+        Create directory
+        @param path: Path where to create
+        @param folder: Name of the folder to create
+        @return: Identifier of the folder revision
+        '''
+        return ERR_TODO
