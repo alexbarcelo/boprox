@@ -22,3 +22,18 @@ def load ( file ):
     @param file: Should have a read method
     '''
     return DeltaContainer(file)
+
+def multiOpen (listoffiles):
+    '''
+    Return a DeltaContainer that holds the delta binary information of multiple
+    deltas.
+    
+    @param listoffiles: List of filenames. The first element must be 
+    last-to-apply (normally the newest, unless we are getting a rollback delta).
+    Generation will be pop-ing the list
+    '''
+    val = listoffiles.pop()
+    delta = open(val)
+    while listoffiles:
+        delta.joinDelta ( open(listoffiles.pop()) )
+

@@ -414,6 +414,45 @@ class ServerInstance():
             return ERR_NOTAUTH
         return 0
     
+    def _getDeltasSinceEvent ( self, eventType , condition , startRev ):
+        '''
+        Get all the deltas since a given "event" (sqlite column)
+        The row that satisfies the condition is NOT added to the list
+        (be careful with idrev vs fromrev).
+        
+        @param eventType: String containing the name of a sqlite column.
+        @param condition: Condition to check in the column. Remind that the
+        row that verifies this condition is not added.
+        @param startRev: Revision to start with (newer revision)  
+        @return: the best error code if something goes wrong, otherwise returns
+        a list of delta identifiers
+        '''
+        # thinking in a yield-ing function maybe?
+        # but the chain checker should be done before starting,
+        # yield function seems a bad idea
+        with self._conn as c:
+            revRow = c.execute ( '''select * from revisions
+                where idrev=?''' , (startRev,) ).fetchone()
+            deltaHistory = []
+            while revRow[eventType] != condition:
+                if not revRow['typefrom'] in (REV_COPYFILE, REV_MOVEFILE, REV_MODIFIED):
+                    self._errormsg('Found an invalid revision when creating a chaing of changes')
+                    return ERR_CANNOT
+                deltaHistory.append( revRow['idrev'] )
+
+                revRow = c.execute ( 'select * from revisions where idrev=?' , 
+                    (revRow['fromrev'],) ).fetchone()
+                if not revRow:
+                    self._errormsg('Could not create the chain of events, a revision was not found')
+                    return ERR_CANNOT
+                self._logger.debug ( 'This row %s has %s in %s' , 
+                    str(revRow['idrev']) , str(revRow[eventType]) , eventType )
+        if not deltaHistory:
+            #emtpy, no chain exists
+            self._errormsg('Empty chain, not a delta-event-chain. Check file history')
+            return ERR_CANNOT
+        return deltaHistory
+    
     def getErrorMsg(self):
         return self._errormsg
     
@@ -612,3 +651,77 @@ class ServerInstance():
         
         self._logger.debug ( "Latest revision: %s" , int(nextRev) )
         return nextRev, tsnow
+
+    def GetDelta(self, idRev, idFromRev):
+        '''
+        Get a delta (see rsync algorithm) from the server to jump to a newer
+        revision. The delta is known to the server or fabricated from some 
+        deltas
+        
+        @param idRev: "Destination revision"
+        @param irFromRev: "Origin revision"
+        @return: Binary information of the petition (asked delta)
+        '''
+        
+        with self._conn as c:
+            # First, check permissions
+            row = c.execute ("select idfile from revisions where idrev=?",
+                (idFromRev,) ).fetchone()
+            if not row:
+                self._errormsg ("Unknown origin revision")
+                return ERR_NOTEXIST
+            row = c.execute ("select path,isfolder from files where idfile=?",
+                (row['idfile'],) )
+            if not row:
+                self._errormsg('Unconsistent files table (database error)')
+                return ERR_INTERNAL
+            if row['isfolder']:
+                self._errormsg('Cannot get a delta for a folder')
+                return ERR_CANNOT
+            originpath = row['path']
+            ret = self._checkPerms(originpath, auth.READ)
+            if ret < 0:
+                return ret
+            
+            # Until now everything seems fine, let's check "destination"
+            revRow = c.execute( "select * from revisions where idrev=?" , 
+                (idRev,) ).fetchone()
+            if not revRow:
+                self._errormsg('Unknown destination revision')
+                return ERR_NOTEXIST
+            row = c.execute ("select path,isfolder from files where idfile=?" ,
+                (revRow['idfile']) ).fetchone()
+            if not row:
+                self._errormsg('Unconsistent files table (database error)')
+                return ERR_INTERNAL
+            if row['isfolder']:
+                self._errormsg('Cannot get a delta for a folder')
+                return ERR_CANNOT
+            # only check permissions if there is a folder change
+            if originpath != row['path']:
+                ret = self._checkperms(row['path'], auth.READ)
+                if ret < 0:
+                    return ret
+        #if it's the easy way, we do it the easy way (most likely to hapen)
+        if (revRow['fromrev'] == idFromRev) and (revRow['fromtype'] == REV_MODIFIED):
+            #yes, we are lucky!
+            try:
+                return Deltas.open(os.path.join(self._deltasdir,str(idRev))).getXMLRPCBinary()
+            except:
+                return ERR_FS
+        else:
+            # 1st: check that exists a chain of non-deletions between 
+            # this two revisions (save the first hardcopy for later)
+            deltaList = self._getDeltasSinceEvent ( 'idrev' , idFromRev , idRev )
+            if type(deltaList) == int:
+                return deltaList
+                
+            # 2nd: try to join everything
+            try:
+                listoffiles = [os.path.join(self._deltasdir, str(i)) for i in deltaList]
+                delta = Deltas.multiOpen(listoffiles)
+            except:
+                return ERR_FS
+            
+            # 3rd: Send delta
+            return delta.getXMLRPCBinary()

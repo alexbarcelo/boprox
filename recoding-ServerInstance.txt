@@ -3,73 +3,6 @@ Created on Aug 5, 2011
 
 @author: marius
 '''
-    
-    def getDeltasSinceEvent ( self, eventType , condition , startRev ):
-        """Get all the deltas since a given "event" (sqlite column)
-        The row that satisfies the condition is NOT added to the list
-        (be careful with idrev vs fromrev)
-        Return the best error code if something goes wrong
-        """
-        # thinking in yield-ing... but if there is an error, 
-        # then everything would seem more awkward
-        # Maybe is more pytonic, and raise when needed
-        deltaHistory = [ startRev ]
-        with self._conn as c:
-            revRow = c.execute ( '''select * from revisions
-                where idrev=?''' , (startRev,) ).fetchone()
-            while revRow[eventType] != condition:
-                revRow = c.execute ( '''select * from revisions 
-                    where idrev=?''' , 
-                    (revRow['fromrev'],) ).fetchone()
-                if not revRow:
-                    # asking for impossible connexion
-                    return ERR_CANNOT
-                    
-                self._logger.debug ( 'This row %s has %s in %s' , 
-                    str(revRow['idrev']) , str(revRow[eventType]) , 
-                    eventType )
-                    
-                deltaHistory.append( revRow['idrev'] )
-        return deltaHistory
-        
-    def GetDelta(self, idRev, idFromRev):
-        """Get delta (see rsync algorithm) to jump between two revisions"""
-        
-        #if it's the easy way, we do it the easy way (most likely to hapen)
-        with self._conn as c:
-            revRow = c.execute( "select * from revisions where idrev=?" , idRev).fetchone()
-        
-        if (revRow['fromrev'] == idFromRev) and (revRow['fromtype'] == REV_MODIFIED):
-            #yes, we are lucky!
-            try:
-                delta = Deltas.open(os.path.join(self._deltasdir,str(idRev)))
-            except:
-                delta = ERR_FS
-            return delta.getXMLRPCBinary()
-        else:
-            if revRow['fromtype'] != REV_MODIFIED:
-                # asking for an inexistant delta 
-                return ERR_CANNOT
-              
-            # 1st: check that exists a chain of non-deletions between 
-            # this two revisions (save the first hardcopy for later)
-            deltaList = self.getDeltasSinceEvent ( 'idrev' , idFromRev , idRev )
-            if type(deltaList) == int:
-                return deltaList
-                
-            # 2nd: try to join everything
-            try:
-                val = deltaList.pop()
-                self._logger.debug ( "Getting delta for %s" , str(val) )
-                delta = Deltas.open(os.path.join(self._deltasdir, str(val)))
-                while deltaList:
-                    filename = os.path.join(self._deltasdir, str(deltaList.pop()))
-                    delta.joinDelta ( Deltas.open(filename) )
-            except:
-                return ERR_FS
-                    
-            # 3rd: Send delta
-            return delta.getXMLRPCBinary()
 
     def GetMetaInfo ( self, rev , force=False):
         """Get the metainfo (actually size and chksum) of some revision
@@ -94,8 +27,6 @@ Created on Aug 5, 2011
     def MakeDir (self, path ):
         """Create directory ``path''"""
         return ERR_TODO
-    
-    
         
     def GetFullRevision ( self, idRev ):
         """Get a file by its revision identificator (not necessarily
