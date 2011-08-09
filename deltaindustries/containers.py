@@ -28,6 +28,7 @@ class GenContainer:
                 type(binarydata) == 'bytes'): 
                 self._bindata = pickle.loads(binarydata)
             else:
+                print str(type(binarydata))
                 raise TypeError
         else:
             self._bindata = None
@@ -48,7 +49,7 @@ class GenContainer:
         @param filename: String of a file. It will be written
         '''
         with open ( filename , 'wb' ) as f:
-            self._dump(f)
+            self.dump(f)
             
     def getXMLRPCBinary (self):
         return Binary(pickle.dumps(self._bindata))
@@ -93,4 +94,12 @@ class HashContainer(GenContainer):
         '''
         if self._bindata:
             del (self._bindata)
-        self._bindata = pyrsync.blockchecksums(f)
+        self._bindata = pyrsync.blockchecksums(file)
+    
+    def computeDelta (self, file):
+        '''
+        Compute a delta for the open file (with the hash info in self)
+        '''
+        ret = DeltaContainer()
+        ret._bindata = pyrsync.rsyncdelta(file, self._bindata)
+        return ret

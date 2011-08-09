@@ -4,6 +4,7 @@ Created on Aug 3, 2011
 @author: marius
 '''
 from containers import HashContainer
+import __builtin__
 
 def open ( filename ):
     '''
@@ -11,7 +12,7 @@ def open ( filename ):
     
     @param filename: String of a binary file that has the hashes.
     '''
-    with open(filename, 'rb') as f:
+    with __builtin__.open(filename, 'rb') as f:
         return HashContainer(f)
     
 def load ( file ):
@@ -30,6 +31,6 @@ def eval (filename):
     hashes will be computed and returned in a container
     '''
     ret = HashContainer()
-    with open ( filename, "rb") as f:
+    with __builtin__.open (filename, "rb") as f:
         ret.eval(f)
     return ret

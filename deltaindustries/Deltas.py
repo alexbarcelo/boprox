@@ -5,6 +5,7 @@ Created on Aug 3, 2011
 '''
 
 from containers import DeltaContainer
+import __builtin__
 
 def open ( filename ):
     '''
@@ -12,7 +13,7 @@ def open ( filename ):
     
     @param filename: String of a binary file that has the delta information.
     '''
-    with open(filename, 'rb') as f:
+    with __builtin__.open(filename, 'rb') as f:
         return DeltaContainer(f)
     
 def load ( file ):
@@ -33,7 +34,7 @@ def multiOpen (listoffiles):
     Generation will be pop-ing the list
     '''
     val = listoffiles.pop()
-    delta = open(val)
+    delta = __builtin__.open(val)
     while listoffiles:
         delta.joinDelta ( open(listoffiles.pop()) )
 

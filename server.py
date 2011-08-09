@@ -17,12 +17,14 @@ import os
 import sqlite3
 import logging
 from datetime import datetime
+import time
 from zlib import adler32
 import sys
 from traceback import format_exc
 import auth
 
 from deltaindustries import Hashes, Deltas
+import Sanitize
 
 try:
     import fcntl
@@ -35,7 +37,7 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
 
 class AuthXMLRPCServerTLS(SimpleXMLRPCServer):
     def __init__(self, addr, userauth = None, requestHandler=RequestHandler,
-            keyfile=None, certfile=None, logRequests=True, allow_none=False, 
+            keyfile=None, certfile=None, logRequests=True, allow_none=True, 
             encoding=None, bind_and_activate=True):
         """Overriding __init__ method of the SimpleXMLRPCServer
 
@@ -183,31 +185,6 @@ REV_DELETEFILE   = 3
 REV_ROLLEDBACK   = 4
 REV_MODIFIED     = 5
 REV_FOLDER       = 6
-
-# Most of them are windows-illegal chars, and probably it is still incomplete
-# ! is added to avoid an improbable shell-escapation in some badly done scripts
-# (better to be extra careful than mess it up, and windows forbids ? anyway) 
-FORBIDDEN_CHARS = ['/', "\\",'!','<','>',':','"','|','?','*']
-FORBIDDEN_CHARS.extend([chr(i) for i in range(1,32)])
-
-# Side note: Client should be careful to send a POSIX path, so the client is
-# expected to strip the slashes '/'. If they do not strip them, probably 
-# strange things will happen (maybe server will search for unexistant folders) 
-
-# Windows stuff, again...
-FORBIDDEN_NAMES = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4', 
-    'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 
-    'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9' ]
-
-# Plus something else --posix special folders
-FORBIDDEN_NAMES.extend(['.','..'])
-
-class SanitizeError(Exception):
-    def __init__(self, char, msg='Found this, not allowed in context: '):
-        self.char = char
-        self.msg  = msg
-    def __str__(self):
-        return self.msg + repr(self.char)
         
 def wincase_callable(a,b):
     # We assume everything is UTF-8 in the database (let the raise go up)
@@ -229,7 +206,6 @@ class ServerInstance():
         
         # debugging now!
         self._logger = logging.getLogger('boprox-server')
-        self._logger.setLevel(logging.DEBUG)
         
         self._errormsg = ''
         
@@ -380,23 +356,23 @@ class ServerInstance():
         and folders, etc.
         
         @param path: String of a folder or a file.
-        @return: The sanitized version of the path. Raise a SanitizeError if
+        @return: The sanitized version of the path. Raise a Error if
         an error is encountered.
         '''
         if not self._isLocalPath(path):
-            raise SanitizeError (path, 'Illegal path (not in server): ')
+            raise Sanitize.Error (path, 'Illegal path (not in server): ')
         
-        for ch in FORBIDDEN_CHARS:
+        for ch in Sanitize.FORBIDDEN_CHARS:
             if ch in file:
-                raise SanitizeError(ch)
+                raise Sanitize.Error(ch)
         
         firstch, lastch = file[0], file[-1]
         if firstch == '.' or firstch == ' ':
-            raise SanitizeError('`'+firstch+"' (first character)")
+            raise Sanitize.Error('`'+firstch+"' (first character)")
         if lastch == '.' or lastch == ' ':
-            raise SanitizeError('`'+lastch+"' (last character)")
-        if file in FORBIDDEN_NAMES:
-            raise SanitizeError(file,'Illegal name: ')
+            raise Sanitize.Error('`'+lastch+"' (last character)")
+        if file in Sanitize.FORBIDDEN_NAMES:
+            raise Sanitize.Error(file,'Illegal name: ')
         
         # everything seems ok, return a full path that should be usable
         return os.path.join(self._repodir,path,file)
@@ -404,13 +380,13 @@ class ServerInstance():
     def _checkPerms (self, path, idperm):
         user = self._getUsername()
         if not user:
-            self._errormsg('Not authenticated')
+            self._errormsg = 'Not authenticated'
             return ERR_NOTAUTH
         if not self._userauth:
-            self._errormsg('No authentication mecanism on server')
+            self._errormsg = 'No authentication mecanism on server'
             return  ERR_INTERNAL
         if not self._userauth.checkPerm(user, path, idperm):
-            self._errormsg('User %s not authorized to do that' % (user,))
+            self._errormsg = 'User %s not authorized to do that' % user
             return ERR_NOTAUTH
         return 0
     
@@ -435,14 +411,14 @@ class ServerInstance():
             deltaHistory = []
             while revRow[eventType] != condition:
                 if not revRow['typefrom'] in (REV_COPYFILE, REV_MOVEFILE, REV_MODIFIED):
-                    self._errormsg('Found an invalid revision when creating a chaing of changes')
+                    self._errormsg = 'Found an invalid revision when creating a chain of changes'
                     return ERR_CANNOT
                 deltaHistory.append( revRow['idrev'] )
-
                 revRow = c.execute ( 'select * from revisions where idrev=?' , 
                     (revRow['fromrev'],) ).fetchone()
                 if not revRow:
-                    self._errormsg('Could not create the chain of events, a revision was not found')
+                    self._errormsg = ( 'Could not create the chain of events,'+
+                        ' a revision was not found' )
                     return ERR_CANNOT
                 self._logger.debug ( 'This row %s has %s in %s' , 
                     str(revRow['idrev']) , str(revRow[eventType]) , eventType )
@@ -470,7 +446,7 @@ class ServerInstance():
         
         try:
             filepath = self._sanitizeFilename(path, newfile)            
-        except SanitizeError as e:
+        except Sanitize.Error as e:
             self._errormsg = e.__str__()
             return ERR_SANITIZE
         
@@ -484,7 +460,7 @@ class ServerInstance():
             with open(filepath, "wb") as f:
                 f.write(bindata.data)
         except:
-            self._errormsg('Internal filesystem error when opening ' + filepath)
+            self._errormsg='Internal filesystem error when opening ' + filepath
             return ERR_FS
         
         # Now we have created the file locally
@@ -494,19 +470,19 @@ class ServerInstance():
         with open ( filepath , "rb" ) as f:
             computedChecksum = adler32(f.read())
         if chksum and (chksum != computedChecksum):
-            self._errormsg('Checksums do not match --rolled back')
+            self._errormsg = 'Checksums do not match --rolled back'
             os.remove(filepath)
             return ERR_CHKSUM
         
         #then size
         computedSize = os.stat(filepath).st_size
         if size and (computedSize != size):
-            self._errormsg('Size do not match. Local size: '+ str(computedSize)
+            self._errormsg = 'Size do not match. Local size: '+ str(computedSize
                 + ' --rolled back')
             os.remove(filepath)
             return ERR_SIZE
         
-        tsnow = datetime.now()
+        tsnow = datetime.fromtimestamp(int(time.time()))
         
         with self._conn as c:
             cursor = c.execute('''insert into files 
@@ -527,7 +503,9 @@ class ServerInstance():
         
         # calculate here hashes for rsync algorithm
         hashes = Hashes.eval(filepath)
-        hashes.save (os.path.join(self._hashesdir,str(idrev)))
+        savehash = os.path.join(self._hashesdir,str(idrev))
+        self._logger.debug ("Saving hash in %s", savehash)
+        hashes.save (savehash)
         
         return idrev, tsnow
     
@@ -543,7 +521,7 @@ class ServerInstance():
         '''
         # Check that is authenticated
         if not self._getUsername():
-            self._errormsg('Should be authenticated to do that')
+            self._errormsg = 'Should be authenticated to do that'
             return ERR_NOTAUTH
         
         self._logger.debug('Getting news from %s' , repr(timestamp) )
@@ -551,14 +529,14 @@ class ServerInstance():
         # open connection and start working
         with self._conn as c:
             # first, simple iteration ...
-            cur = c.execute ( '''select idfile, timestamp as "ts [timestamp]" 
-                from revisions order by timestamp desc''' )
+            cur = c.execute ( '''select idfile, timestamp as "ts [timestamp]" from revisions
+                order by timestamp desc''' )
             self._logger.debug ('Cursor: %s' , repr(cur) )
             # ... and save every changed id
             idsChanged = set()
             for row in cur:
                 self._logger.debug ( "Row with timestamp %s for idfile %s",
-                    repr(row['ts']), type(row['ts']) , str(row['idfile']) )
+                    repr(row['ts']), str(row['idfile']) )
                 if row['ts'] > timestamp:
                     idsChanged.add( row['idfile'] )
                 else:
@@ -569,7 +547,7 @@ class ServerInstance():
             for i in idsChanged:
                 with self._conn as c:
                     try:
-                        row = c.execute ( '''select path,file,
+                        row = c.execute ( '''select path,file
                             from files where idfile=?''', (i,) ).fetchone()
                         # only return information if the user has read permissions
                         # on that folder
@@ -596,7 +574,7 @@ class ServerInstance():
         @return: Pair of the identifier of the actual revision (once applied
         this delta) and the server timestamp of this file.
         '''        
-        tsnow = datetime.now()
+        tsnow = datetime.fromtimestamp(int(time.time()))
         # get real checksum
         self._logger.debug("Receiving delta, now()=%s", repr(tsnow) )
         self._logger.debug("Chksum received: %s", repr(chksum) )
@@ -607,13 +585,14 @@ class ServerInstance():
             rowRev = c.execute ( "select * from revisions where idrev=?" ,
                 (idRev,)).fetchone()
             if not rowRev:
-                self._errormsg('Unknown revision')
+                self._errormsg = 'Unknown revision'
                 return ERR_NOTEXIST
             self._logger.debug ( "Getting row of file information . . ." )
             rowFile = c.execute ( "select * from files where idfile=?" ,
                 (rowRev['idfile'],) ).fetchone()
             if not rowFile:
-                self._errormsg ('Data not found in the database, check revision existance')
+                self._errormsg = ('Data not found in the database, '+
+                    'check revision existance')
                 return ERR_NOTEXIST
             
             # Authentication check
@@ -621,13 +600,13 @@ class ServerInstance():
             
             # Basic checks
             if rowFile['lastrev'] != idRev:
-                self._errormsg ("Outdated client: not the last revision")
+                self._errormsg  = "Outdated client: not the last revision"
                 return ERR_OUTDATED
             if rowFile['deleted'] == 1:
-                self._errormsg("File is deleted, cannot add revisions to it")
+                self._errormsg = "File is deleted, cannot add revisions to it"
                 return ERR_DELETED
             if rowFile['isfolder']:
-                self._errormsg('The file is a folder, cannot add revisions to it')
+                self._errormsg = 'The file is a folder, cannot add revisions to it'
                 return ERR_CANNOT
             
             # Now do really something
@@ -664,15 +643,15 @@ class ServerInstance():
             row = c.execute ("select idfile from revisions where idrev=?",
                 (idFromRev,) ).fetchone()
             if not row:
-                self._errormsg ("Unknown origin revision")
+                self._errormsg = "Unknown origin revision"
                 return ERR_NOTEXIST
             row = c.execute ("select path,isfolder from files where idfile=?",
                 (row['idfile'],) )
             if not row:
-                self._errormsg('Unconsistent files table (database error)')
+                self._errormsg = 'Unconsistent files table (database error)'
                 return ERR_INTERNAL
             if row['isfolder']:
-                self._errormsg('Cannot get a delta for a folder')
+                self._errormsg = 'Cannot get a delta for a folder'
                 return ERR_CANNOT
             originpath = row['path']
             ret = self._checkPerms(originpath, auth.READ)
@@ -683,15 +662,15 @@ class ServerInstance():
             revRow = c.execute( "select * from revisions where idrev=?" , 
                 (idRev,) ).fetchone()
             if not revRow:
-                self._errormsg('Unknown destination revision')
+                self._errormsg = 'Unknown destination revision'
                 return ERR_NOTEXIST
             row = c.execute ("select path,isfolder from files where idfile=?" ,
                 (revRow['idfile']) ).fetchone()
             if not row:
-                self._errormsg('Inconsistent files table (database error)')
+                self._errormsg = 'Inconsistent files table (database error)'
                 return ERR_INTERNAL
             if row['isfolder']:
-                self._errormsg('Cannot get a delta for a folder')
+                self._errormsg = 'Cannot get a delta for a folder'
                 return ERR_CANNOT
             # only check permissions if there is a folder change
             if originpath != row['path']:
@@ -736,13 +715,13 @@ class ServerInstance():
             row = c.execute ('select * from revisions where idrev=?' , 
                 (idRev,) ).fetchone()
             if not row:
-                self._errormsg('Unknown revision')
+                self._errormsg = 'Unknown revision'
                 return ERR_NOTEXIST
             # check permissions
             fileRow = c.execute('select path from files where idfile=?' ,
                 (row['idfile'],) ).fetchone()
             if not fileRow:
-                self._errormsg('Inconsistent files table (database error)')
+                self._errormsg = 'Inconsistent files table (database error)'
                 return ERR_INTERNAL
             ret = self._checkPerms(fileRow['path'], auth.READ)
             if ret < 0:
@@ -750,11 +729,12 @@ class ServerInstance():
             # check if this operation can be the easy way
             if row['hardexist'] != 1:
                 self._logger.debug ( 'Doing it the hard way' )
-                deltaList = self.getDeltasSinceEvent ( 'hardexist' , 1 , idRev )
-                self._logger.debug ( "(in GetFullRevision) Variable deltaList received: %s" , repr(deltaList) )
+                deltaList = self._getDeltasSinceEvent ('hardexist', 1, idRev)
+                self._logger.debug ( "GetFullRevision: deltaList received: %s",
+                    repr(deltaList) )
                 if type(deltaList) == int:
-                    self._errormsg('Could not create internal chain of deltas. Internal error: %s' 
-                        % str(deltaList) )
+                    self._errormsg = ( 'Could not create internal chain of deltas.'+
+                        ' Internal error: %s' % str(deltaList) )
                     return ERR_INTERNAL
                 
                 # join everything
@@ -790,26 +770,27 @@ class ServerInstance():
         @param force: If a force GetMetaInfo is done (force=True) then the 
         server will do a hard copy (if does not exist) and physically check
         this values. A write permission is needed in this case. Default False.
-        @return: The metainfo (actually return a pair size,checksum). Size
+        @return: The metainfo (actually a tuple size,checksum,timestamp). Size
         and/or checksum may be None if not forced.
         '''
         with self._conn as c:
-            row = c.execute('select * from revisions where idrev=?', 
-                (idrev,) ).fetchone()
+            row = c.execute('''select 
+                idfile,size,chksum,timestamp as "ts [timestamp]" 
+                from revisions where idrev=?''', (idrev,) ).fetchone()
             if not row:
-                self._errormsg('Unknown revision')    
+                self._errormsg = 'Unknown revision'    
                 return ERR_NOTEXIST
-            fileRow = c.execute ('select path from files where idfile=?',
-                (row['path'],) ).fetchone()
+            fileRow = c.execute ('select path,isfolder from files where idfile=?',
+                (row['idfile'],) ).fetchone()
             if not fileRow:
-                self._errormsg('Inconsistent files table (database error)')
+                self._errormsg = 'Inconsistent files table (database error)'
                 return ERR_INTERNAL
 
         if force == False:
             ret = self._checkPerms(fileRow['path'], auth.READ)
             if ret < 0:
                 return ret
-            return row['size'], row['chksum']
+            return row['size'], row['chksum'], row['ts'], fileRow['isfolder']
         else:
             ret = self._checkPerms(fileRow['path'], auth.WRITE)
             if ret < 0:
@@ -827,10 +808,10 @@ class ServerInstance():
         if ret < 0:
             return ret
         with self._conn as c:
-            row = c.execute ( 'select lastrev from files where path=?,file=?', 
+            row = c.execute ( 'select lastrev from files where path=? and file=?', 
                 (path,file) ).fetchone()
         if not row:
-            self._errormsg('Unknown file')
+            self._errormsg = 'Unknown file'
             return ERR_NOTEXIST
         return row['lastrev']
         
@@ -847,15 +828,15 @@ class ServerInstance():
             return ret
         try:
             folderpath = self._sanitizeFilename(path, folder)            
-        except SanitizeError as e:
+        except Sanitize.Error as e:
             self._errormsg = e.__str__()
             return ERR_SANITIZE
         # Safely ready to create it
-        tsnow = datetime.now()
+        tsnow = datetime.fromtimestamp(int(time.time()))
         try:
             os.mkdir(folderpath)
         except:
-            self._errormsg('Filesystem error when creating folder')
+            self._errormsg = 'Filesystem error when creating folder'
             return ERR_FS
         with self._conn as c:
             cursor = c.execute('''insert into files 

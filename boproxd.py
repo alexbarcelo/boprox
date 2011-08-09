@@ -10,6 +10,9 @@ import ConfigParser
 import server
 import auth
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
 if __name__ == '__main__':
     # First get the defaults
     config = ConfigParser.ConfigParser( {

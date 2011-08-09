@@ -24,8 +24,15 @@ http://samba.anu.edu.au/rsync/.
 
 import collections
 import hashlib
-from xmlrpclib import Binary
 
+if not(hasattr(__builtins__, "bytes")) or str is bytes:
+    # Python 2.x compatibility
+    def bytes(var, *args):
+        try:
+            return ''.join(map(chr, var))
+        except TypeError:
+            return map(ord, var)
+        
 __all__ = ["rollingchecksum", "weakchecksum", "patchstream", "rsyncdelta",
     "blockchecksums"]
 
@@ -57,7 +64,7 @@ def rsyncdelta(datastream, remotesignatures, blocksize=4096):
             # be missed and the data sent over. May fix eventually, but this
             # problem arises very rarely.
             matchblock = remote_weak.index(checksum, matchblock + 1)
-            stronghash = Binary ( hashlib.md5(bytes(window)).digest() )
+            stronghash = hashlib.md5(bytes(window)).digest()
             matchblock = remote_strong.index(stronghash, matchblock)
 
             match = True
@@ -107,7 +114,7 @@ def rsyncdelta(datastream, remotesignatures, blocksize=4096):
         if isinstance(element, int):
             deltastructure.append(element)
         elif element:
-            deltastructure.append(Binary(bytes(element)))
+            deltastructure.append(bytes(element))
 
     return deltastructure
 
@@ -123,7 +130,7 @@ def blockchecksums(instream, blocksize=4096):
     
     while read:
         weakhashes.append(weakchecksum(bytes(read))[0])
-        Binary(stronghashes.append(hashlib.md5(read).digest()))
+        stronghashes.append(hashlib.md5(read).digest())
         read = instream.read(blocksize)
     
     # Not sure if empty case needed
