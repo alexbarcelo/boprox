@@ -150,15 +150,13 @@ def patchstream(instream, outstream, delta):
     for element in delta[1:]:
         if isinstance(element, int) and blocksize:
             if element == -1:
-                instream.seek(0)
+                print 'a'
+                outstream.seek(0)
                 continue
             else:
                 instream.seek(element * blocksize)
-                elemdata = instream.read(blocksize)
-        else:
-            elemdata = element.data
-        outstream.write(elemdata)
-
+                element = instream.read(blocksize)
+        outstream.write(element)
 
 def rollingchecksum(removed, new, a, b, blocksize=4096):
     """
@@ -192,8 +190,5 @@ def joindeltas(deltaBase, deltaAdd):
     
     If different blocksize-deltas are used, everything will crash, for sure
     """
-    
     deltaBase.append(-1)
-    
-    for i in deltaAdd[1:]:
-        deltaBase.append(i)
+    deltaBase.extend(deltaAdd[1:])

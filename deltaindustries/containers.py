@@ -27,6 +27,8 @@ class GenContainer:
                 # thinking in python3...
                 type(binarydata) == 'bytes'): 
                 self._bindata = pickle.loads(binarydata)
+            elif hasattr(binarydata,'data'):
+                self._bindata = pickle.loads(binarydata.data)
             else:
                 print str(type(binarydata))
                 raise TypeError
@@ -66,7 +68,6 @@ class DeltaContainer(GenContainer):
         @param delta: Contains information of a later delta
         '''
         pyrsync.joindeltas(self._bindata, delta._bindata)
-        del (delta)
     
     def patch (self, infile, outfile):
         '''

@@ -20,7 +20,7 @@ from datetime import datetime
 import time
 from zlib import adler32
 import sys
-from traceback import format_exc
+from traceback import format_exc, print_exc
 import auth
 
 from deltaindustries import Hashes, Deltas

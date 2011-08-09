@@ -34,7 +34,7 @@ def multiOpen (listoffiles):
     Generation will be pop-ing the list
     '''
     val = listoffiles.pop()
-    delta = __builtin__.open(val)
+    delta = open(val)
     while listoffiles:
-        delta.joinDelta ( open(listoffiles.pop()) )
-
+        delta.join ( open(listoffiles.pop()) )
+    return delta

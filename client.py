@@ -79,14 +79,14 @@ class ClientError(Exception):
         self.moreinfo = None 
 
     def __str__(self):
-        str = '\nError in client communication with server\n'
-        str+= '-----------------------------------------\n'
-        str+= 'Return code: ' + self.retcode
+        estr = '\nError in client communication with server\n'
+        estr+= '-----------------------------------------\n'
+        estr+= 'Return code: ' + str(self.retcode)
         if self.call:
-            str += '\nRemote call in progress: ' + self.call
+            estr += '\nRemote call in progress: ' + self.call
         if self.moreinfo:
-            str+= '\n-----------------------------------------\n'+self.moreinfo
-        return str
+            estr+= '\n-----------------------------------------\n'+self.moreinfo
+        return estr
     
 class LocalError(Exception):
     pass
@@ -327,7 +327,6 @@ class SingleRepoClient:
         It is safe to call this function periodically, when there are no changes
         it is not network-intensive.
         '''
-        
         self._logger.debug('Getting changes since %s' , self._timestamp )
         changedData = self._RemoteCaller.GetFileNews( self._timestamp )
         # now get each change
@@ -491,7 +490,7 @@ class SingleRepoClient:
                     self._logger.debug ( "Checksum: %s" , repr(computedChksum) )
                     self._logger.debug ( "Size: %s" , repr(computedSize) )
                     ret = self._RemoteCaller.SendDelta ( row['lastrev'], 
-                        delta.getXMLRPCBinary, computedChksum, computedSize )
+                        delta.getXMLRPCBinary(), computedChksum, computedSize )
                     self._logger.debug ( "Sent, response: %s" , repr(ret) )
                     
                     with self._db as c:
@@ -499,9 +498,9 @@ class SingleRepoClient:
                             lastrev=?, timestamp=?, localtime=?, chksum=?, size=?
                             where idfile=?''' , (ret[0], ret[1], modifiedTime, 
                                 computedChksum, computedSize, row['idfile'] )
-                            )                    
+                            )
                     # update the hashes
-                    self._logger.debug ( "Uptading hash file %s" , str(row['idfile']) )
+                    self._logger.debug ( "Updating hash file %s" , str(row['idfile']) )
                     hash = Hashes.eval(localfile)
                     hash.save(os.path.join(self._hashesdir, str(row['idfile']) ))
                 else:
