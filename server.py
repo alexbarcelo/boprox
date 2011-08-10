@@ -203,10 +203,10 @@ class ServerInstance():
         except AttributeError:
             self._userauth = None
         
+        self._dicterror = {}
+        
         # debugging now!
         self._logger = logging.getLogger('boprox-server')
-        
-        self._errormsg = ''
         
         if config:
             self._repodir   = config.get('Directories','repo')
@@ -379,13 +379,13 @@ class ServerInstance():
     def _checkPerms (self, path, idperm):
         user = self._getUsername()
         if not user:
-            self._errormsg = 'Not authenticated'
+            self._seterrormsg ('Not authenticated')
             return ERR_NOTAUTH
         if not self._userauth:
-            self._errormsg = 'No authentication mecanism on server'
+            self._seterrormsg('No authentication mecanism on server')
             return  ERR_INTERNAL
         if not self._userauth.checkPerm(user, path, idperm):
-            self._errormsg = 'User %s not authorized to do that' % user
+            self._seterrormsg ('User %s not authorized to do that' % user)
             return ERR_NOTAUTH
         return 0
     
@@ -410,22 +410,35 @@ class ServerInstance():
             deltaHistory = []
             while revRow[eventType] != condition:
                 if not revRow['typefrom'] in (REV_COPYFILE, REV_MODIFIED):
-                    self._errormsg = 'Found an invalid revision when creating a chain of changes'
+                    self._seterrormsg('Found an invalid revision when creating a chain of changes')
                     return ERR_CANNOT
                 deltaHistory.append( revRow['idrev'] )
                 revRow = c.execute ( 'select * from revisions where idrev=?' , 
                     (revRow['fromrev'],) ).fetchone()
                 if not revRow:
-                    self._errormsg = ( 'Could not create the chain of events,'+
-                        ' a revision was not found' )
+                    self._seterrormsg('Could not create the chain of events,'+
+                        ' a revision was not found')
                     return ERR_CANNOT
                 self._logger.debug ( 'This row %s has %s in %s' , 
                     str(revRow['idrev']) , str(revRow[eventType]) , eventType )
         deltaHistory.append(revRow['idrev'])
         return deltaHistory
     
+    def _seterrormsg(self, errormsg):
+        user = self._getUsername()
+        if user:
+            self._dicterror[user] = errormsg
+    
     def getErrorMsg(self):
-        return self._errormsg
+        try:
+            user = self._getUsername()
+            if user:
+                return self._dicterror[self._getUsername()]
+            else:
+                return ("You can only get error messages when authenticated")
+        except KeyError:
+            return("No error message found. Check authentication." +
+                    'Are you sure there has been an error?')
     
     def _basicNewChecks(self, path, newfile):
         '''
@@ -440,11 +453,11 @@ class ServerInstance():
         try:
             filepath = self._sanitizeFilename(path, newfile)            
         except Sanitize.Error as e:
-            self._errormsg = e.__str__()
+            self._seterrormsg(e.__str__())
             return ERR_SANITIZE
         
         if not self._safeNew(path, newfile):
-            self._errormsg = 'Server not able to create: ' + newfile
+            self._seterrormsg('Server not able to create: ' + newfile)
             return ERR_CANNOT
         return filepath
     
@@ -467,7 +480,7 @@ class ServerInstance():
             originrow = c.execute ('select * from revisions where idrev=?',
                 (originrev,) ).fetchone()
             if not originrow:
-                self._errormsg = 'Unexistant origin revision'
+                self._seterrormsg('Unexistant origin revision')
                 return ERR_NOTEXIST
             # good place to create hard revision, if not already exists
             if not originrow['hardexist']:
@@ -517,7 +530,8 @@ class ServerInstance():
             with open(filepath, "wb") as f:
                 f.write(bindata.data)
         except:
-            self._errormsg='Internal filesystem error when opening ' + filepath
+            self._seterrormsg('Internal filesystem error when opening ' 
+                + filepath)
             return ERR_FS
         
         # Now we have created the file locally
@@ -527,15 +541,15 @@ class ServerInstance():
         with open ( filepath , "rb" ) as f:
             computedChecksum = adler32(f.read())
         if chksum and (chksum != computedChecksum):
-            self._errormsg = 'Checksums do not match --rolled back'
+            self._seterrormsg('Checksums do not match --rolled back')
             os.remove(filepath)
             return ERR_CHKSUM
         
         #then size
         computedSize = os.stat(filepath).st_size
         if size and (computedSize != size):
-            self._errormsg = 'Size do not match. Local size: '+ str(computedSize
-                + ' --rolled back')
+            self._seterrormsg('Size do not match. Local size: '+ 
+                str(computedSize) + ' --rolled back')
             os.remove(filepath)
             return ERR_SIZE
         
@@ -578,7 +592,7 @@ class ServerInstance():
         '''
         # Check that is authenticated
         if not self._getUsername():
-            self._errormsg = 'Should be authenticated to do that'
+            self._seterrormsg('Should be authenticated to do that')
             return ERR_NOTAUTH
         
         self._logger.debug('Getting news from %s' , repr(timestamp) )
@@ -611,7 +625,7 @@ class ServerInstance():
                         if self._checkPerms(row['path'], auth.READ) == 0:
                             pathList.append( (row['path'], row['file']) )
                     except AttributeError, KeyError:
-                        self._errormsg = ( 'Internal error --incoherent database\n' +
+                        self._seterrormsg('Internal error --incoherent database\n' +
                             'Exception traceback:\n' + format_exc() )
                         return ERR_INTERNAL
                     
@@ -642,13 +656,13 @@ class ServerInstance():
             rowRev = c.execute ( "select * from revisions where idrev=?" ,
                 (idRev,)).fetchone()
             if not rowRev:
-                self._errormsg = 'Unknown revision'
+                self._seterrormsg('Unknown revision')
                 return ERR_NOTEXIST
             self._logger.debug ( "Getting row of file information . . ." )
             rowFile = c.execute ( "select * from files where idfile=?" ,
                 (rowRev['idfile'],) ).fetchone()
             if not rowFile:
-                self._errormsg = ('Data not found in the database, '+
+                self._seterrormsg('Data not found in the database, '+
                     'check revision existance')
                 return ERR_NOTEXIST
             
@@ -657,13 +671,13 @@ class ServerInstance():
             
             # Basic checks
             if rowFile['lastrev'] != idRev:
-                self._errormsg  = "Outdated client: not the last revision"
+                self._seterrormsg("Outdated client: not the last revision")
                 return ERR_OUTDATED
             if rowFile['deleted'] == 1:
-                self._errormsg = "File is deleted, cannot add revisions to it"
+                self._seterrormsg("File is deleted, cannot add revisions to it")
                 return ERR_DELETED
             if rowFile['isfolder']:
-                self._errormsg = 'The file is a folder, cannot add revisions to it'
+                self._seterrormsg('The file is a folder, cannot add revisions to it')
                 return ERR_CANNOT
             
             # Now do really something
@@ -700,15 +714,15 @@ class ServerInstance():
             row = c.execute ("select idfile from revisions where idrev=?",
                 (idFromRev,) ).fetchone()
             if not row:
-                self._errormsg = "Unknown origin revision"
+                self._seterrormsg("Unknown origin revision")
                 return ERR_NOTEXIST
             row = c.execute ("select path,isfolder from files where idfile=?",
                 (row['idfile'],) )
             if not row:
-                self._errormsg = 'Unconsistent files table (database error)'
+                self._seterrormsg('Unconsistent files table (database error)')
                 return ERR_INTERNAL
             if row['isfolder']:
-                self._errormsg = 'Cannot get a delta for a folder'
+                self._seterrormsg('Cannot get a delta for a folder')
                 return ERR_CANNOT
             originpath = row['path']
             ret = self._checkPerms(originpath, auth.READ)
@@ -719,15 +733,15 @@ class ServerInstance():
             revRow = c.execute( "select * from revisions where idrev=?" , 
                 (idRev,) ).fetchone()
             if not revRow:
-                self._errormsg = 'Unknown destination revision'
+                self._seterrormsg('Unknown destination revision')
                 return ERR_NOTEXIST
             row = c.execute ("select path,isfolder from files where idfile=?" ,
                 (revRow['idfile']) ).fetchone()
             if not row:
-                self._errormsg = 'Inconsistent files table (database error)'
+                self._seterrormsg('Inconsistent files table (database error)')
                 return ERR_INTERNAL
             if row['isfolder']:
-                self._errormsg = 'Cannot get a delta for a folder'
+                self._seterrormsg('Cannot get a delta for a folder')
                 return ERR_CANNOT
             # only check permissions if there is a folder change
             if originpath != row['path']:
@@ -774,7 +788,7 @@ class ServerInstance():
                 fileinfo = c.execute ('''select path,file from files where 
                     idfile=?''', (row['idfile'],) ).fetchone()
                 if not fileinfo:
-                    self._errormsg = 'Inconsistent database, a file was not found'
+                    self._seterrormsg('Inconsistent database, a file was not found')
                     return ERR_INTERNAL
                 if self._checkPerms(fileinfo['path'], auth.READ) == 0:
                     return row['idrev']
@@ -785,8 +799,8 @@ class ServerInstance():
         deltaList = self._getDeltasSinceEvent ('hardexist', 1, idRev)
         self._logger.debug ( "received this deltaList: %s", repr(deltaList) )
         if type(deltaList) == int:
-            self._errormsg = ( 'Could not create internal chain of deltas.'+
-                ' Internal error: %s' % str(deltaList) )
+            self._seterrormsg( 'Could not create internal chain of deltas. '+
+                'Internal error: ' + str(deltaList) )
             return ERR_INTERNAL
         
         # join everything
@@ -820,13 +834,13 @@ class ServerInstance():
             row = c.execute ('select * from revisions where idrev=?' , 
                 (idRev,) ).fetchone()
             if not row:
-                self._errormsg = 'Unknown revision'
+                self._seterrormsg('Unknown revision')
                 return ERR_NOTEXIST
             # check permissions
             fileRow = c.execute('select path from files where idfile=?' ,
                 (row['idfile'],) ).fetchone()
             if not fileRow:
-                self._errormsg = 'Inconsistent files table (database error)'
+                self._seterrormsg('Inconsistent files table (database error)')
                 return ERR_INTERNAL
             ret = self._checkPerms(fileRow['path'], auth.READ)
             if ret < 0:
@@ -857,12 +871,12 @@ class ServerInstance():
                 idfile,size,chksum,timestamp as "ts [timestamp]" 
                 from revisions where idrev=?''', (idrev,) ).fetchone()
             if not row:
-                self._errormsg = 'Unknown revision'    
+                self._seterrormsg('Unknown revision')    
                 return ERR_NOTEXIST
             fileRow = c.execute ('select path,isfolder from files where idfile=?',
                 (row['idfile'],) ).fetchone()
             if not fileRow:
-                self._errormsg = 'Inconsistent files table (database error)'
+                self._seterrormsg('Inconsistent files table (database error)')
                 return ERR_INTERNAL
 
         if force == False:
@@ -890,7 +904,7 @@ class ServerInstance():
             row = c.execute ( 'select lastrev from files where path=? and file=?', 
                 (path,file) ).fetchone()
         if not row:
-            self._errormsg = 'Unknown file'
+            self._seterrormsg('Unknown file')
             return ERR_NOTEXIST
         return row['lastrev']
         
@@ -908,14 +922,14 @@ class ServerInstance():
         try:
             folderpath = self._sanitizeFilename(path, folder)            
         except Sanitize.Error as e:
-            self._errormsg = e.__str__()
+            self._seterrormsg(e.__str__())
             return ERR_SANITIZE
         # Safely ready to create it
         tsnow = datetime.fromtimestamp(int(time.time()))
         try:
             os.mkdir(folderpath)
         except:
-            self._errormsg = 'Filesystem error when creating folder'
+            self._seterrormsg('Filesystem error when creating folder')
             return ERR_FS
         with self._conn as c:
             cursor = c.execute('''insert into files 
