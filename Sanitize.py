@@ -22,6 +22,13 @@ FORBIDDEN_NAMES = ['CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'COM3', 'COM4',
 # Plus something else --posix special folders and empty names
 FORBIDDEN_NAMES.extend(['.','..',''])
 
+def wincase_callable(a,b):
+    # We assume everything is UTF-8 in the database (let the raise go up)
+    x = unicode(a,'UTF-8')
+    y = unicode(b,'UTF-8')
+    # and compare it case-insensitive
+    return cmp (x.lower(), y.lower())
+
 class Error(Exception):
     def __init__(self, char, msg='Found this, not allowed in context: '):
         self.char = char

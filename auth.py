@@ -60,14 +60,15 @@ class UserSQLiteAuth:
         with self._dbusers as c:
             c.execute ( '''create table if not exists
                 users ( 
-                    username text primary key,
+                    uid integer primary key autoincrement,
+                    username text unique not null,
                     publickey text
                     )
                 ''')
             c.execute ( '''create table if not exists
                 permissions (
                     idperm integer primary key autoincrement,
-                    username text,
+                    uid integer,
                     path text,
                     permcode integer
                     )
@@ -85,7 +86,23 @@ class UserSQLiteAuth:
                 timestamp timestamp,
                 token text
                 )''')
-            
+    
+    def getUID(self, user):
+        '''
+        Give the user identificator (uid) for a given name. Standard database
+        users start at 1001 (real identificator = 1000 + uid database column)
+        '''
+        # hardcoded admin
+        if user == 'admin':
+            return 0
+        
+        with self._dbusers as c:
+            row = c.execute ('select uid from users where username=?' ,
+                (user,) ).fetchone()
+        if not row:
+            return -1
+        return 1000+row['uid']
+    
     def checkPerm(self, user, path, idperm):
         '''
         Check the user permissions
@@ -98,11 +115,13 @@ class UserSQLiteAuth:
         # Hardcoded admin
         if user == 'admin':
             return True
-        
         with self._dbusers as c:
+            rowUser = c.execute ('select uid from users where username=?' , 
+                (user,) ).fetchone()
+            if not rowUser:
+                return False
             cur = c.execute ('''select path,permcode from permissions 
-                where username=?''' , (user,) ) 
-        
+                where uid=?''' , (rowUser['uid'],) ) 
         BaseChecked  = False
         DelegChecked = False
         
@@ -111,11 +130,11 @@ class UserSQLiteAuth:
             if path.startswith(row['path']):
                 # Check that this (or any previous one) has enough base permissions
                 if ( not BaseChecked and 
-                     idperm & BASEMASK  <= row['perm'] & BASEMASK):
+                     idperm & BASEMASK  <= row['permcode'] & BASEMASK):
                     BaseChecked = True
                 # Check that this (or any previous one) has enough delegation permissions
                 if ( not DelegChecked and
-                     idperm & DELEGMASK <= row['perm'] & DELEGMASK ):
+                     idperm & DELEGMASK <= row['permcode'] & DELEGMASK ):
                     DelegChecked = True
                 # If at this point we have enough permissions, then can return
                 if DelegChecked and BaseChecked:
@@ -135,7 +154,9 @@ class UserSQLiteAuth:
         '''
         Set a list of "persistent" users (users with a constant password).
         This is less secure than public/private key and tokens, 
-        should be used for debugging and/or admin purposes.
+        should be used for debugging and/or admin purposes. At this moment,
+        this only is used for adding an ``admin'' that is (hardcoded) 
+        administrator of everything.
         
         @param users: List of tuples [ (user1,pass1) , (user2,pass2) ... ]
         or simply a tuple (user,pass)
@@ -173,7 +194,12 @@ class UserSQLiteAuth:
         in this folder. 0 if the user has no permissions.
         '''
         with self._dbusers as c:
-            cur = c.execute ('select * from permissions where user=?', (user,))
+            rowUser = c.execute ('select uid from users where user=?', 
+                (user,) ).fetchone()
+            if not rowUser:
+                return -1
+            cur = c.execute('select * from permissions where uid=?',
+                (rowUser['uid'],) )
         currperm = 0
         for row in cur:
             if dirpath.startswith(row['path']):

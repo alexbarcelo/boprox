@@ -185,13 +185,6 @@ REV_DELETEFILE   = 3
 REV_ROLLEDBACK   = 4
 REV_FOLDER       = 5
         
-def wincase_callable(a,b):
-    # We assume everything is UTF-8 in the database (let the raise go up)
-    x = unicode(a,'UTF-8')
-    y = unicode(b,'UTF-8')
-    # and compare it case-insensitive
-    return cmp (x.lower(), y.lower())
-        
 class ServerInstance():
     def __init__(self, serverParent = None, config = None):
         import string
@@ -227,9 +220,8 @@ class ServerInstance():
             self._conn = sqlite3.connect(self._dbfile, 
                 detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
             self._conn.row_factory = sqlite3.Row
-            
             # To enable case-insensitive in more-than-ascii (windows homage)
-            self._conn.create_collation('wincase', wincase_callable )
+            self._conn.create_collation('wincase', Sanitize.wincase_callable )
 
             # create things if not already exists
             with self._conn as c:
@@ -247,6 +239,7 @@ class ServerInstance():
                     revisions(
                         idrev integer primary key autoincrement,
                         idfile integer not null,
+                        uid integer not null,
                         timestamp timestamp,
                         fromrev integer,
                         rollbackrev integer default null,
@@ -285,6 +278,7 @@ class ServerInstance():
             # not having user authentication mechanisms means
             # something is quite wrong
             self._logger.warning('No authentication mechanism set')
+            self._seterrormsg('Internal error --lack of authentication mechanism')
             return ERR_INTERNAL
             
         etoken = self._userauth.getNewToken (username)
@@ -297,6 +291,13 @@ class ServerInstance():
         if self.serverParent:
             return self.serverParent.username
         return None
+    
+    def _getUID(self):
+        user = self._getUsername()
+        if not user or not self._userauth:
+            self._seterrormsg('Internal error (authentication related)')
+            return ERR_INTERNAL
+        return self._userauth.getUID(user)
 
     def _isLocalPath(self, path):
         '''
@@ -449,16 +450,16 @@ class ServerInstance():
         ret = self._checkPerms(path, auth.WRITE)
         if ret < 0:
             return ret
-        
+        self._logger.debug('Sanitizing path: %s and file: %s', path, newfile)
         try:
             filepath = self._sanitizeFilename(path, newfile)            
         except Sanitize.Error as e:
             self._seterrormsg(e.__str__())
             return ERR_SANITIZE
-        
         if not self._safeNew(path, newfile):
             self._seterrormsg('Server not able to create: ' + newfile)
             return ERR_CANNOT
+        self._logger.debug('Sanitized version: %s', filepath)
         return filepath
     
     def CopyFile (self, path, newfile, originrev):
@@ -494,9 +495,9 @@ class ServerInstance():
                 (path, file, deleted) values (?,?,0)''', (path, newfile) )
             idfile = cursor.lastrowid
             cursor = c.execute('''insert into revisions 
-                ( idfile, timestamp, fromrev, typefrom, chksum, size, hardexist )
-                values (?,?,?,?,?,?,1)''' , 
-                    (idfile,tsnow,originrev,REV_COPYFILE,
+                (idfile,uid,timestamp,fromrev,typefrom,chksum,size,hardexist)
+                values (?,?,?,?,?,?,?,1)''' , 
+                    (idfile,self._getUID(),tsnow,originrev,REV_COPYFILE,
                     originrow['chksum'], originrow['size']) 
                 )
             idrev = cursor.lastrowid
@@ -560,9 +561,9 @@ class ServerInstance():
                 (path, file, deleted) values (?,?,0)''', (path, newfile) )
             idfile = cursor.lastrowid
             cursor = c.execute('''insert into revisions 
-                ( idfile, timestamp, fromrev, typefrom, chksum, size, hardexist )
-                values (?,?,NULL,?,?,?,1)''' , 
-                (idfile,tsnow,REV_NEWFILE,computedChecksum,computedSize) 
+                (idfile,uid,timestamp,fromrev,typefrom,chksum,size,hardexist)
+                values (?,?,?,NULL,?,?,?,1)''' , 
+                (idfile,self._getUID(),tsnow,REV_NEWFILE,computedChecksum,computedSize) 
                 )                    
             idrev = cursor.lastrowid
             c.execute("update files set lastrev=? where idfile=?" , 
@@ -608,10 +609,12 @@ class ServerInstance():
             for row in cur:
                 self._logger.debug ( "Row with timestamp %s for idfile %s",
                     repr(row['ts']), str(row['idfile']) )
-                if row['ts'] > timestamp:
-                    idsChanged.add( row['idfile'] )
-                else:
+                # Better some redundancy than ignoring a change
+                # (client should be redundancy-resistant)
+                # thus the strict ``lower than''
+                if row['ts'] < timestamp:
                     break
+                idsChanged.add( row['idfile'] )
         
             self._logger.debug ( "Getting pathnames for modified files" )
             pathList = []
@@ -683,9 +686,10 @@ class ServerInstance():
             # Now do really something
             self._logger.debug ( "Inserting new revision into database . . ." )
             cur = c.execute ( '''insert into revisions 
-                (idfile, timestamp, fromrev, typefrom, chksum, size, hardexist) 
-                values (?,?,?,?,?,?,0)''' , 
-                (rowRev['idfile'], tsnow, idRev, REV_MODIFIED, chksum, size ) )
+                (idfile,uid,timestamp,fromrev,typefrom,chksum,size,hardexist) 
+                values (?,?,?,?,?,?,?,0)''' , 
+                (rowRev['idfile'], self._getUID(), tsnow, 
+                idRev, REV_MODIFIED, chksum, size ) )
             nextRev = cur.lastrowid
             c.execute ( '''update files set lastrev=? where idfile=?''' ,
                 (nextRev , rowRev['idfile'] ) )
@@ -937,8 +941,9 @@ class ServerInstance():
                 values (?,?,0,1)''', (path, folder) )
             idfile = cursor.lastrowid
             cursor = c.execute('''insert into revisions 
-                ( idfile, timestamp, fromrev, typefrom, hardexist )
-                values (?,?,NULL,?,NULL)''' , (idfile,tsnow,REV_FOLDER) )                    
+                (idfile,uid,timestamp,fromrev,typefrom,hardexist)
+                values (?,?,?,NULL,?,NULL)''' , 
+                (idfile,self._getUID(),tsnow,REV_FOLDER) )                    
             idrev = cursor.lastrowid
             c.execute("update files set lastrev=? where idfile=?" , 
                 (idrev, idfile) )

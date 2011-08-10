@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.DEBUG)
 if __name__ == '__main__':    
     firstrepo = client.SingleRepoClient(host='localhost', port=1356,
         username='johnsmith', key=client.getKeyFromPEMfile('./johnsmith.rsa'), 
-        dbfile='./clientdb.sqlite', localpath='repoclient')
+        dbfile='./clientdb-john.sqlite', localpath='repojohnsmith', remotepath='johnsmith')
     
     print "Token received from server:", firstrepo._token
     
@@ -30,7 +30,7 @@ if __name__ == '__main__':
     print "Now using admin account"
     
     adminrepo = client.SingleRepoClient(host='localhost', port=1356,
-        username='admin', permatoken='IChangedIt', dbfile='./clientdb.sqlite',
+        username='admin', permatoken='IChangedIt', dbfile='./clientdb-admin.sqlite', 
         localpath='./repoclient', hashesdir='./hashesclient')
     
     print "Doing an admin-ping"
@@ -38,3 +38,7 @@ if __name__ == '__main__':
     
     adminrepo.UpdateToServer()
     adminrepo.UpdateFromServer()
+    
+    print "Checking from johnsmith account"
+    firstrepo.UpdateToServer()
+    firstrepo.UpdateFromServer() 

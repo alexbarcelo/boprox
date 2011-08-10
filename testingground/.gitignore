@@ -1,8 +1,9 @@
-clientdb.sqlite
+clientdb-*.sqlite
 file.sqlite
 repo
 hashes
 deltas
 hards
 repoclient
+repojohnsmith
 hashesclient

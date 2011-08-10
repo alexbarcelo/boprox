@@ -141,6 +141,7 @@ class SingleRepoClient:
                 pass
             
             def __request(myself, methodname, params):
+                self._logger.info('XMLRPC call: %s', methodname)
                 func = getattr(self._authConn, methodname)
                 ret = func(*params)
                 if isinstance(ret, int) and ret < 0:
@@ -180,6 +181,8 @@ class SingleRepoClient:
         self._db = sqlite3.connect(dbfile,
             detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
         self._db.row_factory = sqlite3.Row
+        # To enable case-insensitive in more-than-ascii (windows homage)
+        self._db.create_collation('wincase', Sanitize.wincase_callable )
         
         # create things if they do not exist alreay
         with self._db as c:
@@ -194,7 +197,7 @@ class SingleRepoClient:
                     localtime real,
                     chksum integer default null,
                     size integer default null,
-                    isdir boolean default 0,
+                    isfolder boolean default 0,
                     conflict boolean default 0
                     )
                 ''')
@@ -222,19 +225,18 @@ class SingleRepoClient:
         self._authConn = ServerProxy(self._authURL, use_datetime=True, 
             allow_none=True)
         
-    def _notThisRepo(self, path):
+    def _Convert2Repo(self, path):
         '''
-        Checks if a given path starts with ``remotepath'' and, striping this 
-        prefix, is a valid local directory
-        '''
-        self._logger.debug("Remote path:%s", self._remotepath)
-        self._logger.debug(" Local path:%s", path )
+        For a given path, check that it starts with ``remotepath'' and, 
+        striping this prefix, is a valid local directory.
         
+        Windows-case-chaos-aware by wincase collation (see __init__)
+        '''
         if not path.startswith(self._remotepath):
-            return True
+            return None
         spath = path[len(self._remotepath):].lstrip('/')
         if spath == '':
-            return False
+            return ''
         path1, path2 = os.path.split(spath)
         with self._db as c:
             row = c.execute ('''select idfile from files where
@@ -242,9 +244,9 @@ class SingleRepoClient:
                 file=? collate wincase and
                 isfolder=1''', (path1,path2)).fetchone()
         if row:
-            return False
+            return spath
         # No path exists --not local path
-        return True
+        return None
         
     def _sanitizeFilename(self, path, file):
         '''
@@ -430,7 +432,7 @@ class SingleRepoClient:
             for dircheck in _fileAcceptor(dirnames):
                 modifiedTime = os.stat(os.path.join(dirpath,dircheck)).st_mtime
                 row = self._db.execute ( '''select localtime from files where
-                    path=? and file=? and isdir=1''', 
+                    path=? and file=? and isfolder=1''', 
                     (dirpath,dircheck) ).fetchone()
                 if not row:
                     self._logger.info('Creating folder %s in path %s (remote: %s)',
@@ -439,7 +441,7 @@ class SingleRepoClient:
                         remotedir, dircheck)
                     with self._db as c:
                         c.execute ( '''insert into files 
-                            (path,file,lastrev,timestamp,localtime,isdir) 
+                            (path,file,lastrev,timestamp,localtime,isfolder) 
                             values (?,?,?,?,?,1)''' , (dirpath, dircheck, 
                                 idrev, serverTimestamp, modifiedTime)
                             )
@@ -470,32 +472,40 @@ class SingleRepoClient:
         '''
         self._logger.debug('Getting changes since %s' , self._timestamp )
         changedData = self._RemoteCaller.GetFileNews( self._timestamp )
+        self._logger.debug('Changed data: %s', changedData)
         # now get each change
-        for path,file in changedData:
+        for remotepath,file in changedData:
+            # Check that the folder is this repo's
+            self._logger.debug ('updating from server path: %s', remotepath)
+            path = self._Convert2Repo(remotepath)
+            if not isinstance(path,str):
+                self._logger.debug ("Path %s outside this repository's scope" ,
+                    remotepath )
+                continue
+            self._logger.debug ('... converted remote path: %s', path)
+            self._logger.debug ('                     file: %s', file)
             with self._db as c:
-                if self._notThisRepo(path):
-                    continue
-                lastrev = self._RemoteCaller.GetLastRev(path, file)
+                lastrev = self._RemoteCaller.GetLastRev(remotepath, file)
                 self._logger.debug("Changes for file,path: %s,%s (revision: %s)" , 
                     file,path,str(lastrev) )
                 filepath = self._sanitizeFilename(path, file)
                 #if exists, get the delta; if not, get the file
                 row = c.execute ( 'select * from files where file=? and path=?' , 
                     (file,path) ).fetchone()
-                serverSize,serverChksum,serverTimestamp, isdir = \
+                serverSize,serverChksum,serverTimestamp, isfolder = \
                     self._RemoteCaller.GetMetaInfo(lastrev)
                 self._logger.debug('Metainfo received: %s' , 
-                    repr((serverSize,serverChksum,serverTimestamp, isdir)) )
+                    repr((serverSize,serverChksum,serverTimestamp, isfolder)) )
                 if row:
                     self._logger.debug ('Checking that the file is in a older revision')
                     if row['lastrev'] == lastrev:
                         continue
-                    if row['isdir'] and isdir:
+                    if row['isfolder'] and isfolder:
                         self._logger.debug('It is a folder')
                         # TODO maybe we have to track deleted folders and
                         # something else... from now on, ``silently'' continue
                         continue
-                    if row['isdir'] or isdir:
+                    if row['isfolder'] or isfolder:
                         raise LocalError('Server and client inconsistent with '+
                             'folder/file %s' , filepath)
                     self._logger.debug ('Checking that size and mtime of local file')
@@ -516,7 +526,7 @@ class SingleRepoClient:
                     delta.patch (tmpfile, filepath)
                     os.remove(tmpfile)
                 else:
-                    if not isdir:
+                    if not isfolder:
                         self._logger.debug('Getting the file (revision %s)' , str(lastrev) )
                         data = self._RemoteCaller.GetFullRevision ( lastrev )
                         with open ( filepath , "wb" ) as f:
@@ -527,7 +537,7 @@ class SingleRepoClient:
                         os.mkdir(filepath)
                         modifiedTime = os.stat(filepath).st_mtime
                         c.execute ('''insert into files 
-                            (path, file, lastrev, timestamp, localtime, isdir)
+                            (path, file, lastrev, timestamp, localtime, isfolder)
                             values (?,?,?,?,?,1)''' , 
                             (path,file,lastrev,serverTimestamp,modifiedTime) 
                             )
