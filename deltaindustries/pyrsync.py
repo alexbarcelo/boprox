@@ -150,7 +150,6 @@ def patchstream(instream, outstream, delta):
     for element in delta[1:]:
         if isinstance(element, int) and blocksize:
             if element == -1:
-                print 'a'
                 outstream.seek(0)
                 continue
             else:

@@ -318,7 +318,148 @@ class SingleRepoClient:
         except:
             # If there is any error, get all the changes
             self._timestamp = datetime.min
+            
+    def CheckChanges(self, filecheck, dirpath, remotedir, rowInfo):
+        '''
+        Given a file (with metadata) check if it has changed. If changes have
+        been made, then send them to the server and update database.
+        
+        @param filecheck: The name of the new file
+        @param dirpath: Must be a correct relative path where file is
+        @param remotedir: The remote counterpart of dirpath
+        @param rowinfo: A database row with metainfo of the file
+        '''
+        localfile = os.path.join(dirpath,filecheck)
+        modifiedTime = os.stat(localfile).st_mtime
+        computedSize = os.stat(localfile).st_size    
+        if ( rowInfo['localtime'] != modifiedTime or
+                 rowInfo['size']  != computedSize ):
+            # Here! Some file needs care
+            self._logger.info('Detected modified file: %s' , localfile )
+            hashes = Hashes.open(os.path.join(
+                self._hashesdir, str(rowInfo['idfile'] )))    
+            # Get size
+            computedSize = os.stat(localfile).st_size
+            
+            with open ( localfile , "rb" ) as f:
+                # Get checksum
+                computedChksum = adler32(f.read())
+                # Get delta
+                f.seek(0)
+                delta = hashes.computeDelta(f)
+            self._logger.debug ( "Last revision: %s" , repr(rowInfo['lastrev']) )
+            self._logger.debug ( "Checksum: %s" , repr(computedChksum) )
+            self._logger.debug ( "Size: %s" , repr(computedSize) )
+            ret = self._RemoteCaller.SendDelta ( rowInfo['lastrev'], 
+                delta.getXMLRPCBinary(), computedChksum, computedSize )
+            self._logger.debug ( "Sent, response: %s" , repr(ret) )
+            
+            with self._db as c:
+                c.execute ( '''update files set 
+                    lastrev=?, timestamp=?, localtime=?, chksum=?, size=?
+                    where idfile=?''' , (ret[0], ret[1], modifiedTime, 
+                        computedChksum, computedSize, rowInfo['idfile'] )
+                    )
+            # update the hashes
+            self._logger.debug ( "Updating hash file %s" , str(rowInfo['idfile']) )
+            hash = Hashes.eval(localfile)
+            hash.save(os.path.join(self._hashesdir, str(rowInfo['idfile']) ))
+        else:
+            self._logger.debug('No changes found for file:%s (path:%s)'
+                % (filecheck,dirpath) )
+        
+    def NewFile(self, filecheck, dirpath, remotedir):
+        '''
+        Function used when a potential new file is found.
+        
+        @param filecheck: The name of the new file
+        @param dirpath: Must be a correct relative path where file is
+        @param remotedir: The remote counterpart of dirpath
+        '''
+        localfile = os.path.join(dirpath,filecheck)
+        modifiedTime = os.stat(localfile).st_mtime
+        computedSize = os.stat(localfile).st_size    
+        self._logger.info('Detected new file: %s' , localfile )
+        with open ( localfile , "rb" ) as f:
+            # Get checksum
+            computedChksum = adler32(f.read())
+            # Get data
+            f.seek(0)
+            dataToSend = Binary(f.read())
+            
+        # Checking if the server knows the file
+        ret = self._RemoteCaller.CheckFileMetadata (computedSize, computedChksum)
+        if ret > 0:
+            # Say the server that we want to copy
+            self._logger.debug( "Creating a copy of revision %s", str(ret) )
+            retcp = self._RemoteCaller.CopyFile ( remotedir, filecheck, ret )
+            self._logger.debug ( "Sent, response: %s" , repr(retcp) )
+            lastrev, timestamp = retcp
+        else:
+            # Send everything (new) to server
+            self._logger.debug( "Transfering new file to server" )
+            ret = self._RemoteCaller.SendNewFile( remotedir, filecheck,
+                dataToSend, computedChksum, computedSize)
+            self._logger.debug ( "Sent, response: %s" , repr(ret) )
+            lastrev,timestamp = ret
+        # We use the revision id
+        with self._db as c:
+            cur = c.execute ( '''insert into files 
+                (path, file, lastrev, timestamp, localtime, chksum, size) 
+                values (?,?,?,?,?,?,?)''' , 
+                    (dirpath, filecheck, 
+                    lastrev, timestamp, modifiedTime, 
+                    computedChksum, computedSize )
+                )
+            fileId = cur.lastrowid
+        # Save the hashes for later use
+        hashes = Hashes.eval(localfile)
+        hashes.save(os.path.join(self._hashesdir, str(fileId) ))
+        
+    def CheckExistantFiles(self):
+        '''
+        This function checks every file and folder in the actual folder
+        (the caller should previously chdir to localpath).
+        '''
+        for walkpath, dirnames, filenames in os.walk('.'):
+            dirpath = os.path.normpath(walkpath)
+            if dirpath == '.': dirpath = ''
+            remotedir = os.path.normpath(os.path.join (self._remotepath, dirpath))
+            if remotedir == '.': remotedir = ''
+            # first, eliminate directories which haven't been modified
+            for dircheck in _fileAcceptor(dirnames):
+                modifiedTime = os.stat(os.path.join(dirpath,dircheck)).st_mtime
+                row = self._db.execute ( '''select localtime from files where
+                    path=? and file=? and isdir=1''', 
+                    (dirpath,dircheck) ).fetchone()
+                if not row:
+                    self._logger.info('Creating folder %s in path %s (remote: %s)',
+                        dircheck, dirpath, remotedir )
+                    idrev,serverTimestamp = self._RemoteCaller.MakeDir(
+                        remotedir, dircheck)
+                    with self._db as c:
+                        c.execute ( '''insert into files 
+                            (path,file,lastrev,timestamp,localtime,isdir) 
+                            values (?,?,?,?,?,1)''' , (dirpath, dircheck, 
+                                idrev, serverTimestamp, modifiedTime)
+                            )
+                elif (row['localtime'] == modifiedTime ):
+                    dirnames.remove(dircheck)
+            for filecheck in _fileAcceptor(filenames):
+                row = self._db.execute ( "select * from files where path=? and file=?",
+                    (dirpath,filecheck) ).fetchone()
+                if row == None:
+                    # New file!
+                    self.NewFile(filecheck, dirpath, remotedir)
+                else:
+                    self.CheckChanges(filecheck, dirpath, remotedir, row)
     
+    def CheckDeletedFiles(self):
+        '''
+        The database is "walked" looking for missing files. 
+        '''
+        pass
+
     def UpdateFromServer(self):
         '''
         Get all changed things from the server (last-timestamp system) and
@@ -413,96 +554,5 @@ class SingleRepoClient:
         its modified time and size with the local database).
         '''
         os.chdir(self._localpath)
-        for walkpath, dirnames, filenames in os.walk('.'):
-            dirpath = os.path.normpath(walkpath)
-            if dirpath == '.': dirpath = ''
-            remotedir = os.path.normpath(os.path.join (self._remotepath, dirpath))
-            if remotedir == '.': remotedir = ''
-            # first, eliminate directories which haven't been modified
-            for dircheck in _fileAcceptor(dirnames):
-                modifiedTime = os.stat(os.path.join(dirpath,dircheck)).st_mtime
-                row = self._db.execute ( '''select localtime from files where
-                    path=? and file=? and isdir=1''', 
-                    (dirpath,dircheck) ).fetchone()
-                if not row:
-                    self._logger.info('Creating folder %s in path %s (remote: %s)',
-                        dircheck, dirpath, remotedir )
-                    idrev,serverTimestamp = self._RemoteCaller.MakeDir(
-                        remotedir, dircheck)
-                    with self._db as c:
-                        c.execute ( '''insert into files 
-                            (path,file,lastrev,timestamp,localtime,isdir) 
-                            values (?,?,?,?,?,1)''' , (dirpath, dircheck, 
-                                idrev, serverTimestamp, modifiedTime)
-                            )
-                elif (row['localtime'] == modifiedTime ):
-                    dirnames.remove(dircheck)
-            
-            for filecheck in _fileAcceptor(filenames):
-                localfile = os.path.join(dirpath,filecheck)
-                modifiedTime = os.stat(localfile).st_mtime
-                computedSize = os.stat(localfile).st_size
-                row = self._db.execute ( "select * from files where path=? and file=?",
-                    (dirpath,filecheck) ).fetchone()
-                if row == None:
-                    # New file!
-                    self._logger.info('Detected new file: %s' , localfile )
-                    with open ( localfile , "rb" ) as f:
-                        # Get checksum
-                        computedChksum = adler32(f.read())
-                        # Get data
-                        f.seek(0)
-                        dataToSend = Binary(f.read())
-                    
-                    # Send everything to server
-                    self._logger.debug( "Transfering new file to server" )
-                    ret = self._RemoteCaller.SendNewFile( remotedir, filecheck,
-                        dataToSend, computedChksum, computedSize)
-                    self._logger.debug ( "Sent, response: %s" , repr(ret) )
-                    # We have the revision id
-                    with self._db as c:
-                        cur = c.execute ( '''insert into files 
-                            (path, file, lastrev, timestamp, localtime, chksum, size) 
-                            values (?,?,?,?,?,?,?)''' , 
-                                (dirpath, filecheck, 
-                                ret[0], ret[1], modifiedTime, 
-                                computedChksum, computedSize )
-                            )
-                        fileId = cur.lastrowid
-                    # Save the hashes for later use
-                    hashes = Hashes.eval(localfile)
-                    hashes.save(os.path.join(self._hashesdir, str(fileId) ))    
-                elif ( row['localtime'] != modifiedTime or
-                       row['size']  != computedSize ):
-                    # Here! Some file needs care
-                    self._logger.info('Detected modified file: %s' , localfile )
-                    hashes = Hashes.open(os.path.join(self._hashesdir, str(row['idfile'])))    
-                    # Get size
-                    computedSize = os.stat(localfile).st_size
-                    
-                    with open ( localfile , "rb" ) as f:
-                        # Get checksum
-                        computedChksum = adler32(f.read())
-                        # Get delta
-                        f.seek(0)
-                        delta = hashes.computeDelta(f)
-                    self._logger.debug ( "Last revision: %s" , repr(row['lastrev']) )
-                    self._logger.debug ( "Checksum: %s" , repr(computedChksum) )
-                    self._logger.debug ( "Size: %s" , repr(computedSize) )
-                    ret = self._RemoteCaller.SendDelta ( row['lastrev'], 
-                        delta.getXMLRPCBinary(), computedChksum, computedSize )
-                    self._logger.debug ( "Sent, response: %s" , repr(ret) )
-                    
-                    with self._db as c:
-                        c.execute ( '''update files set 
-                            lastrev=?, timestamp=?, localtime=?, chksum=?, size=?
-                            where idfile=?''' , (ret[0], ret[1], modifiedTime, 
-                                computedChksum, computedSize, row['idfile'] )
-                            )
-                    # update the hashes
-                    self._logger.debug ( "Updating hash file %s" , str(row['idfile']) )
-                    hash = Hashes.eval(localfile)
-                    hash.save(os.path.join(self._hashesdir, str(row['idfile']) ))
-                else:
-                    self._logger.debug('No changes found for file:%s (path:%s)'
-                        % (filecheck,dirpath) )
+        self.CheckExistantFiles()
+        self.CheckDeletedFiles()

@@ -180,11 +180,10 @@ ERR_NOTAUTH  = -22
 # What can a revision come from:
 REV_NEWFILE      = 0
 REV_COPYFILE     = 1
-REV_MOVEFILE     = 2
+REV_MODIFIED     = 2
 REV_DELETEFILE   = 3
 REV_ROLLEDBACK   = 4
-REV_MODIFIED     = 5
-REV_FOLDER       = 6
+REV_FOLDER       = 5
         
 def wincase_callable(a,b):
     # We assume everything is UTF-8 in the database (let the raise go up)
@@ -410,7 +409,7 @@ class ServerInstance():
                 where idrev=?''' , (startRev,) ).fetchone()
             deltaHistory = []
             while revRow[eventType] != condition:
-                if not revRow['typefrom'] in (REV_COPYFILE, REV_MOVEFILE, REV_MODIFIED):
+                if not revRow['typefrom'] in (REV_COPYFILE, REV_MODIFIED):
                     self._errormsg = 'Found an invalid revision when creating a chain of changes'
                     return ERR_CANNOT
                 deltaHistory.append( revRow['idrev'] )
@@ -428,17 +427,11 @@ class ServerInstance():
     def getErrorMsg(self):
         return self._errormsg
     
-    def SendNewFile (self, path, newfile, bindata , chksum = None, size = None):
+    def _basicNewChecks(self, path, newfile):
         '''
-        Create a *non-existing* file in server
-        
-        @param path: String of an *existing* valid path
-        @param newfile: String of the file to create into path
-        @param bindata: Binary contents of file
-        @param chksum: Checksum of file
-        @param size: Size of file
-        @return: Error code or raise if something goes wrong. A pair idrev and
-        timestamp of the file if everything is ok.
+        This function has the basics checks when a new file is to be created.
+        Used in CopyFile and SendNewFile, and put here to avoid code 
+        duplication. May be used somewhere else.
         '''
         ret = self._checkPerms(path, auth.WRITE)
         if ret < 0:
@@ -453,9 +446,73 @@ class ServerInstance():
         if not self._safeNew(path, newfile):
             self._errormsg = 'Server not able to create: ' + newfile
             return ERR_CANNOT
+        return filepath
+    
+    def CopyFile (self, path, newfile, originrev):
+        '''
+        Create a copy of an existing revision
+        
+        @param path: String of an *existing* valid path
+        @param newfile: String of the file to create into path
+        @param originrev: Identificator of a valid non-folder revision
+        '''
+        filepath = self._basicNewChecks(path, newfile)
+        if isinstance(filepath, int):
+            return filepath
+        
+        self._logger.debug( "Copying revision %s into file %s", 
+            str(originrev), filepath)
+        tsnow = datetime.fromtimestamp(int(time.time()))
+        with self._conn as c:
+            originrow = c.execute ('select * from revisions where idrev=?',
+                (originrev,) ).fetchone()
+            if not originrow:
+                self._errormsg = 'Unexistant origin revision'
+                return ERR_NOTEXIST
+            # good place to create hard revision, if not already exists
+            if not originrow['hardexist']:
+                ret = self._createHard(originrev, c)
+                if ret < 0:
+                    return ret
+                self._logger.debug ('Created hard revision for origin')
+            else:
+                self._logger.debug ('A hard revision already existed for origin')
+            cursor = c.execute('''insert into files 
+                (path, file, deleted) values (?,?,0)''', (path, newfile) )
+            idfile = cursor.lastrowid
+            cursor = c.execute('''insert into revisions 
+                ( idfile, timestamp, fromrev, typefrom, chksum, size, hardexist )
+                values (?,?,?,?,?,?,1)''' , 
+                    (idfile,tsnow,originrev,REV_COPYFILE,
+                    originrow['chksum'], originrow['size']) 
+                )
+            idrev = cursor.lastrowid
+            c.execute("update files set lastrev=? where idfile=?" , 
+                (idrev, idfile) )
+        self._logger.debug('Linking everything')
+        os.link(
+            os.path.join(self._hardsdir,str(originrev)), 
+            os.path.join(self._hardsdir,str(idrev))     )
+        os.link( os.path.join(self._hardsdir,str(originrev)), filepath)
+        return idrev, tsnow
+    
+    def SendNewFile (self, path, newfile, bindata , chksum = None, size = None):
+        '''
+        Create a *non-existing* file in server
+        
+        @param path: String of an *existing* valid path
+        @param newfile: String of the file to create into path
+        @param bindata: Binary contents of file
+        @param chksum: Checksum of file
+        @param size: Size of file
+        @return: Error code or raise if something goes wrong. A pair idrev and
+        timestamp of the file if everything is ok.
+        '''
+        filepath = self._basicNewChecks(path, newfile)
+        if isinstance(filepath, int):
+            return filepath
         
         self._logger.debug ( "Receiving file %s, saving at %s" , newfile , filepath )
-        
         try:
             with open(filepath, "wb") as f:
                 f.write(bindata.data)
@@ -701,6 +758,54 @@ class ServerInstance():
             # 3rd: Send delta
             return delta.getXMLRPCBinary()
         
+    def CheckFileMetadata (self, size, chksum):
+        '''
+        This functions is used by the client to check if a ``new file'' is 
+        really new or it is a copy of an existing file (some revision).
+        
+        @param size: Size of the file
+        @param chksum: ``Standard'' checksum of the file
+        @return: 0 if did not found any, or the revision number otherwise   
+        '''
+        with self._conn as c:
+            cur = c.execute ('''select idrev,idfile from revisions where 
+                size=? and chksum=?''', (size,chksum) )
+            for row in cur:
+                fileinfo = c.execute ('''select path,file from files where 
+                    idfile=?''', (row['idfile'],) ).fetchone()
+                if not fileinfo:
+                    self._errormsg = 'Inconsistent database, a file was not found'
+                    return ERR_INTERNAL
+                if self._checkPerms(fileinfo['path'], auth.READ) == 0:
+                    return row['idrev']
+        return 0
+    
+    def _createHard(self, idRev, openedconn):
+        self._logger.debug ( 'Doing a hard revision on %s', str(idRev) )
+        deltaList = self._getDeltasSinceEvent ('hardexist', 1, idRev)
+        self._logger.debug ( "received this deltaList: %s", repr(deltaList) )
+        if type(deltaList) == int:
+            self._errormsg = ( 'Could not create internal chain of deltas.'+
+                ' Internal error: %s' % str(deltaList) )
+            return ERR_INTERNAL
+        
+        # join everything
+        # first throw away this, but save for later
+        hardRev = deltaList.pop()
+        self._logger.debug ( "Generating internal delta" )
+        try:
+            listoffiles = [os.path.join(self._deltasdir, str(i)) for i in deltaList]
+            delta = Deltas.multiOpen(listoffiles)
+        except:
+            return ERR_FS
+        # the last one, now will have hardcopy
+        openedconn.execute ( '''update revisions set hardexist=1
+            where idrev=?''' , (idRev,) )
+        infile =  os.path.join(self._hardsdir,str(hardRev))
+        outfile = os.path.join(self._hardsdir,str(idRev))
+        delta.patch(infile, outfile)
+        return 0
+    
     def GetFullRevision ( self, idRev ):
         '''
         Get a full file (not a delta) by its revision identificator. The server
@@ -728,36 +833,10 @@ class ServerInstance():
                 return ret
             # check if this operation can be the easy way
             if row['hardexist'] != 1:
-                self._logger.debug ( 'Doing it the hard way' )
-                deltaList = self._getDeltasSinceEvent ('hardexist', 1, idRev)
-                self._logger.debug ( "GetFullRevision: deltaList received: %s",
-                    repr(deltaList) )
-                if type(deltaList) == int:
-                    self._errormsg = ( 'Could not create internal chain of deltas.'+
-                        ' Internal error: %s' % str(deltaList) )
-                    return ERR_INTERNAL
-                
-                # join everything
-                # first throw away this, but save for later
-                hardRev = deltaList.pop()
-                self._logger.debug ( "Generating internal delta" )
-                try:
-                    listoffiles = [os.path.join(self._deltasdir, str(i)) for i in deltaList]
-                    delta = Deltas.multiOpen(listoffiles)
-                except:
-                    return ERR_FS
-                # the last one, now will have hardcopy
-                c.execute ( '''update revisions set hardexist=1
-                    where idrev=?''' , (idRev,) )
-                
-                # this line, saved from
-                row = c.execute ( '''select * from revisions 
-                    where idrev=?''' , (hardRev,) ).fetchone()
-                self._logger.info ( "Creating hard revision %s from revision %s" ,
-                    idRev , hardRev )
-                infile =  os.path.join(self._hardsdir,str(hardRev))
-                outfile = os.path.join(self._hardsdir,str(idRev))
-                delta.patch(infile, outfile)        
+                ret = self._createHard(idRev, c)
+                if ret < 0:
+                    return ret
+
         self._logger.debug ( 'Sending hard revision to client' )
         with open ( os.path.join ( self._hardsdir , str(idRev) ) , "rb" ) as f:
             return Binary ( f.read() )
