@@ -361,19 +361,7 @@ class ServerInstance():
         '''
         if not self._isLocalPath(path):
             raise Sanitize.Error (path, 'Illegal path (not in server): ')
-        
-        for ch in Sanitize.FORBIDDEN_CHARS:
-            if ch in file:
-                raise Sanitize.Error(ch)
-        
-        firstch, lastch = file[0], file[-1]
-        if firstch == '.' or firstch == ' ':
-            raise Sanitize.Error('`'+firstch+"' (first character)")
-        if lastch == '.' or lastch == ' ':
-            raise Sanitize.Error('`'+lastch+"' (last character)")
-        if file in Sanitize.FORBIDDEN_NAMES:
-            raise Sanitize.Error(file,'Illegal name: ')
-        
+        Sanitize.ProcessFile(path,file)        
         # everything seems ok, return a full path that should be usable
         return os.path.join(self._repodir,path,file)
     

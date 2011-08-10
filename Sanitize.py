@@ -29,6 +29,19 @@ def wincase_callable(a,b):
     # and compare it case-insensitive
     return cmp (x.lower(), y.lower())
 
+def ProcessFile (path,file):
+    for ch in FORBIDDEN_CHARS:
+        if ch in file:
+            raise Error(ch)
+    
+    firstch, lastch = file[0], file[-1]
+    if firstch == '.' or firstch == ' ':
+        raise Error('`'+firstch+"' (first character)")
+    if lastch == '.' or lastch == ' ':
+        raise Error('`'+lastch+"' (last character)")
+    if file in FORBIDDEN_NAMES:
+        raise Error(file,'Illegal name: ')
+
 class Error(Exception):
     def __init__(self, char, msg='Found this, not allowed in context: '):
         self.char = char

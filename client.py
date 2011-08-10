@@ -259,18 +259,7 @@ class SingleRepoClient:
         @return: The sanitized version of the path. Raise a Error if
         an error is encountered.
         '''
-        for ch in Sanitize.FORBIDDEN_CHARS:
-            if ch in file:
-                raise Sanitize.Error(ch)
-        
-        firstch, lastch = file[0], file[-1]
-        if firstch == '.' or firstch == ' ':
-            raise Sanitize.Error('`'+firstch+"' (first character)")
-        if lastch == '.' or lastch == ' ':
-            raise Sanitize.Error('`'+lastch+"' (last character)")
-        if file in Sanitize.FORBIDDEN_NAMES:
-            raise Sanitize.Error(file,'Illegal name: ')
-        
+        Sanitize.ProcessFile(path, file)
         # everything seems ok, return a full path that should be usable
         return os.path.join(self._localpath,path,file)
 
