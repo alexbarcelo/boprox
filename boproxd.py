@@ -11,7 +11,6 @@ import server
 import auth
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
 
 if __name__ == '__main__':
     # First get the defaults
@@ -52,7 +51,14 @@ if __name__ == '__main__':
     parser.add_argument('--address', dest='address' ,
         help='Local host name or ip address')
     parser.add_argument('--port', dest='port' , help='Local port')
+    parser.add_argument('--debug', dest='loglevel', action='store_const',
+        const=logging.DEBUG, default=logging.INFO, 
+        help='Be verbose, print debug logs to stdout')
+    parser.add_argument('--quiet', dest='loglevel', action='store_const',
+        const=logging.WARNING, default=logging.INFO, 
+        help='Only print WARNING (and higher) logs')
     args = parser.parse_args()
+    logging.basicConfig(level=args.loglevel)
     
     config.read(args.file)
     

@@ -9,4 +9,4 @@ echo "file2" > repoclient/testfolder/file2
 mkdir repoclient/testfolder/subfolder
 echo "file3" > repoclient/testfolder/subfolder/file3
 
-/usr/bin/python ../boproxd.py --config testing.ini
+/usr/bin/python ../boproxd.py --config testing.ini --quiet
