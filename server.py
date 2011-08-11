@@ -416,7 +416,12 @@ class ServerInstance():
     def _seterrormsg(self, errormsg):
         user = self._getUsername()
         if user:
-            self._dicterror[user] = errormsg
+            try:
+                self._dicterror[user] = errormsg
+            except KeyError:
+                self._logger.warning('Error trying to save error message for: %s',
+                    user)
+                self._logger.warning('Error message:\n%s', errormsg)
     
     def getErrorMsg(self):
         try:
@@ -450,6 +455,71 @@ class ServerInstance():
         self._logger.debug('Sanitized version: %s', filepath)
         return filepath
     
+    def RmFile(self, path, file):
+        '''
+        Remove a file.
+        '''
+        ret = self._checkPerms(path, auth.WRITE)
+        if ret < 0:
+            return ret
+        self._logger.debug('Proceeding to erase file %s in %s', file, path)
+        tsnow = datetime.fromtimestamp(int(time.time()))
+        with self._conn as c:
+            row = c.execute ('''select idfile, lastrev from files where 
+                path=? collate wincase and file=? collate wincase''', 
+                (path,file) ).fetchone()
+            if not row:
+                self._seterrormsg('Trying to remove a file not in the database')
+                return ERR_NOTEXIST
+            cur = c.execute('''insert into revisions 
+                (idfile,uid,timestamp,fromrev,typefrom) values
+                (?,?,?,?,?)''', (row['idfile'],self._getUID(),tsnow,
+                    row['lastrev'],REV_DELETEFILE) )
+            idrev = cur.lastrowid
+            c.execute ('''update files set lastrev=?, deleted=1 where
+                idfile=?''', (idrev,row['idfile']) )
+        self._logger.debug('Deleted file %s in path %s', file,path)
+        return idrev, tsnow
+        
+    def RmDir(self, path, folder):
+        '''
+        Remove a folder. The folder must be ``empty'' (it can only contain
+        deleted items, either files or folders).
+        '''
+        ret = self._checkPerms(path, auth.WRITE)
+        if ret < 0:
+            return ret
+        self._logger.debug('Proceeding to erase folder %s in %s', folder, path)
+        tsnow = datetime.fromtimestamp(int(time.time()))
+        with self._conn as c:
+            try:
+                Sanitize.ProcessFile(path, folder)
+                extpath = os.path.join(path,folder)
+            except Sanitize.Error as e:
+                self._seterrormsg(e.__str__())
+                return ERR_SANITIZE
+            rowFolder = c.execute ('''select idfile, lastrev from files where 
+                path=? collate wincase and file=? collate wincase''', 
+                (path,folder) ).fetchone()
+            if not rowFolder:
+                self._seterrormsg('Trying to remove a folder not in the database')
+                return ERR_NOTEXIST
+            cur = c.execute ('''select deleted from files
+                where path=? collate wincase''', (extpath,) )
+            for row in cur:
+                if not row['deleted']:
+                    self._seterrormsg('There are non-deleted entries in this folder')
+                    return ERR_EXISTANT
+            cur = c.execute('''insert into revisions 
+                (idfile,uid,timestamp,fromrev,typefrom) values
+                (?,?,?,?,?)''', (rowFolder['idfile'],self._getUID(),tsnow,
+                    rowFolder['lastrev'],REV_DELETEFILE) )
+            idrev = cur.lastrowid
+            c.execute ('''update files set lastrev=?, deleted=1 where
+                idfile=?''', (idrev,rowFolder['idfile']) )
+        self._logger.debug('Deleted folder %s in path %s', folder,path)
+        return idrev, tsnow
+            
     def CopyFile (self, path, newfile, originrev):
         '''
         Create a copy of an existing revision

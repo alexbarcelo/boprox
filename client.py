@@ -71,12 +71,11 @@ def getKeyFromPEMfile(filename):
     return None
 
 class ClientError(Exception):
-    def __init__(self, retcode='-1', call=None):
+    def __init__(self, retcode='-1', call=None, moreinfo=None):
         self.retcode = retcode
         self.file = file
         self.call = call
-        # This variable is for a catch-set-reraise procedure
-        self.moreinfo = None 
+        self.moreinfo = moreinfo
 
     def __str__(self):
         estr = '\nError in client communication with server\n'
@@ -145,7 +144,11 @@ class SingleRepoClient:
                 func = getattr(self._authConn, methodname)
                 ret = func(*params)
                 if isinstance(ret, int) and ret < 0:
-                    raise ClientError(ret, methodname)
+                    errormsg = None
+                    try:
+                        errormsg = self._RemoteCaller.getErrorMsg()
+                    finally:
+                        raise ClientError(ret, methodname, errormsg)
                 return ret
             
             def __getattr__(self, name):
@@ -247,7 +250,7 @@ class SingleRepoClient:
             return spath
         # No path exists --not local path
         return None
-        
+    
     def _sanitizeFilename(self, path, file):
         '''
         Check for exploits and dangerous things, '/' and '\' characters (on the 
@@ -262,8 +265,57 @@ class SingleRepoClient:
         Sanitize.ProcessFile(path, file)
         # everything seems ok, return a full path that should be usable
         return os.path.join(self._localpath,path,file)
-
+    
+    def _rm(self, path, file, remotepath):
+        '''
+        Remove a file. This sends the petition to the server and updates the
+        database. Doesn't touch the filesystem.
+        '''
+        with self._db as c:
+            row = c.execute ('''select idfile from files where 
+                path=? collate wincase and file=? collate wincase''',
+                (path,file) ).fetchone()
+            if not row:
+                self._logger.warning("File %s in path %s doesn't exist (database error)", 
+                    file, path)
+                raise LocalError('Trying to remove a not existing file (database error)')
+            idrev, tsnow = self._RemoteCaller.RmFile(remotepath,file)
+            c.execute ('''update files set deleted=1,lastrev=?,timestamp=?,localtime=NULL
+                where idfile=?''', (idrev, tsnow, row['idfile']) )
         
+    def _rmdir(self, path, dir, remotepath):
+        '''
+        Remove a directory. This sends the petition to the server and updates
+        the database. ``rm -rf'' the folder (but doesn't touch the filesystem).
+        '''
+        with self._db as c:
+            folderRow = c.execute('''select idfile from files where
+                path=? collate wincase and file=? collate wincase''',
+                (path,dir) ).fetchone()
+            if not folderRow:
+                self._logger.warning("Folder %s in path %s doesn't exist (database error)",
+                    dir, path)
+                raise LocalError('Trying to remove a not existing folder (database error)')
+            extpath = os.path.join(path,dir)
+            cur = c.execute ('''select isfolder, deleted, path, file from files 
+                where path=? collate wincase''', (extpath,) )
+            for row in cur:
+                # Recursive removal
+                if row['isfolder'] and not row['deleted']:
+                    self._rmdir(extpath, row['file'], 
+                        os.path.join(remotepath,dir) )
+                # File removal, if necessary
+                elif row['deleted'] != True:
+                    self._logger.debug ( 'local path: %s -- local file: %s', 
+                        row['path'], row['file'])
+                    self._logger.debug('Remote path: %s', remotepath)
+                    self._rm(row['path'],row['file'], 
+                        os.path.join(remotepath,dir) )
+            idrev, tsnow = self._RemoteCaller.RmDir(remotepath, dir)
+            c.execute('''update files set deleted=1,lastrev=?,timestamp=?,localtime=NULL
+                where idfile=?''', (idrev, tsnow, folderRow['idfile']) )
+        self._logger.info('Removed directory: %s', extpath)
+    
     def ping(self):
         '''
         Dummy function --calling the remote dummy function
@@ -309,7 +361,7 @@ class SingleRepoClient:
         except:
             # If there is any error, get all the changes
             self._timestamp = datetime.min
-            
+    
     def CheckChanges(self, filecheck, dirpath, remotedir, rowInfo):
         '''
         Given a file (with metadata) check if it has changed. If changes have
@@ -358,7 +410,7 @@ class SingleRepoClient:
         else:
             self._logger.debug('No changes found for file:%s (path:%s)'
                 % (filecheck,dirpath) )
-        
+    
     def NewFile(self, filecheck, dirpath, remotedir):
         '''
         Function used when a potential new file is found.
@@ -406,7 +458,89 @@ class SingleRepoClient:
         # Save the hashes for later use
         hashes = Hashes.eval(localfile)
         hashes.save(os.path.join(self._hashesdir, str(fileId) ))
+    
+    def ServerCheckChanges(self, file, path, remotepath):
+        '''
+        Function used to check if a certain file has changed in the remote side.
         
+        @param file: String, name of file entry
+        @param path: String, relative path in the repository
+        @param remotepath: String, server-relative path
+        '''
+        with self._db as c:
+            lastrev = self._RemoteCaller.GetLastRev(remotepath, file)
+            self._logger.debug("Changes for file,path: %s,%s (revision: %s)" , 
+                file,path,str(lastrev) )
+            filepath = self._sanitizeFilename(path, file)
+            #if exists, get the delta; if not, get the file
+            row = c.execute ( 'select * from files where file=? and path=?' , 
+                (file,path) ).fetchone()
+            serverSize,serverChksum,serverTimestamp, isfolder = \
+                self._RemoteCaller.GetMetaInfo(lastrev)
+            self._logger.debug('Metainfo received: %s' , 
+                repr((serverSize,serverChksum,serverTimestamp, isfolder)) )
+            if row:
+                self._logger.debug ('Checking that the file is in a older revision')
+                if row['lastrev'] == lastrev:
+                    return
+                if row['isfolder'] and isfolder:
+                    self._logger.debug('It is a folder')
+                    return
+                if row['isfolder'] or isfolder:
+                    raise LocalError('Server and client inconsistent with '+
+                        'folder/file %s' , filepath)
+                if not os.path.exists(filepath):
+                    self._logger.warning('File %s locally deleted', filepath)
+                    raise LocalError('The server updated a locally-deleted file')
+                self._logger.debug ('Checking that size and mtime of local file')
+                computedSize = os.stat(filepath).st_size
+                modifiedTime = os.stat(filepath).st_mtime
+                if ( computedSize != row['size'] or
+                     modifiedTime != row['localtime'] ):
+                    raise LocalError ('Found modified file %s' % filepath)
+                
+                # assuming that everything is up-to-date and ok, 
+                # but update is needed
+                self._logger.debug ('Getting the delta')
+                delta = self._RemoteCaller.GetDelta ( lastrev, row['lastrev'] )            
+                self._logger.debug ( "Using delta information" )
+                tmpp,tmpf = os.path.split (filepath)
+                tmpfile = os.path.join ( tmpp, '.'+tmpf+'-'+str(lastrev)+'.tmp')
+                os.rename(filepath, tmpfile)
+                delta.patch (tmpfile, filepath)
+                os.remove(tmpfile)
+            else:
+                if not isfolder:
+                    self._logger.debug('Getting the file (revision %s)' , str(lastrev) )
+                    data = self._RemoteCaller.GetFullRevision ( lastrev )
+                    with open ( filepath , "wb" ) as f:
+                        f.write(data.data)
+                else:
+                    # Special case for directories
+                    self._logger.info('Creating folder %s', filepath)
+                    os.mkdir(filepath)
+                    modifiedTime = os.stat(filepath).st_mtime
+                    c.execute ('''insert into files 
+                        (path, file, lastrev, timestamp, localtime, isfolder)
+                        values (?,?,?,?,?,1)''' , 
+                        (path,file,lastrev,serverTimestamp,modifiedTime) 
+                        )
+                    return
+            # check and save metadata
+            with open (filepath, "rb") as f:
+                computedChksum = adler32(f.read())
+            computedSize = os.stat(filepath).st_size
+            modifiedTime = os.stat(filepath).st_mtime
+            if ( (  serverSize and   serverSize != computedSize  ) or
+                 (serverChksum and serverChksum != computedChksum) ):
+                raise LocalError('Metadata error on received file %s' % filepath)
+            c.execute ('''insert into files 
+                (path, file, lastrev, timestamp, localtime, chksum, size)
+                values (?,?,?,?,?,?,?)''' , 
+                (path,file,lastrev,serverTimestamp,modifiedTime,
+                    computedChksum, computedSize) 
+                )
+    
     def CheckExistantFiles(self):
         '''
         This function checks every file and folder in the actual folder
@@ -449,8 +583,18 @@ class SingleRepoClient:
         '''
         The database is "walked" looking for missing files. 
         '''
-        pass
-
+        cur = self._db.execute('select * from files order by path collate wincase')
+        for row in cur:
+            if row['deleted']:
+                continue
+            remotepath = os.path.join(self._remotepath, row['path'])
+            filepath = os.path.join(self._localpath, row['path'], row['file'])
+            if row['isfolder']:
+                if not os.path.isdir(filepath):
+                    self._rmdir(row['path'], row['file'], remotepath)
+            elif not os.path.isfile(filepath):
+                self._rm(row['path'], row['file'], remotepath)
+    
     def UpdateFromServer(self):
         '''
         Get all changed things from the server (last-timestamp system) and
@@ -473,78 +617,7 @@ class SingleRepoClient:
                 continue
             self._logger.debug ('... converted remote path: %s', path)
             self._logger.debug ('                     file: %s', file)
-            with self._db as c:
-                lastrev = self._RemoteCaller.GetLastRev(remotepath, file)
-                self._logger.debug("Changes for file,path: %s,%s (revision: %s)" , 
-                    file,path,str(lastrev) )
-                filepath = self._sanitizeFilename(path, file)
-                #if exists, get the delta; if not, get the file
-                row = c.execute ( 'select * from files where file=? and path=?' , 
-                    (file,path) ).fetchone()
-                serverSize,serverChksum,serverTimestamp, isfolder = \
-                    self._RemoteCaller.GetMetaInfo(lastrev)
-                self._logger.debug('Metainfo received: %s' , 
-                    repr((serverSize,serverChksum,serverTimestamp, isfolder)) )
-                if row:
-                    self._logger.debug ('Checking that the file is in a older revision')
-                    if row['lastrev'] == lastrev:
-                        continue
-                    if row['isfolder'] and isfolder:
-                        self._logger.debug('It is a folder')
-                        # TODO maybe we have to track deleted folders and
-                        # something else... from now on, ``silently'' continue
-                        continue
-                    if row['isfolder'] or isfolder:
-                        raise LocalError('Server and client inconsistent with '+
-                            'folder/file %s' , filepath)
-                    self._logger.debug ('Checking that size and mtime of local file')
-                    computedSize = os.stat(filepath).st_size
-                    modifiedTime = os.stat(filepath).st_mtime
-                    if ( computedSize != row['size'] or
-                         modifiedTime != row['localtime'] ):
-                        raise LocalError ('Found modified file %s' % filepath)
-                    
-                    # assuming that everything is up-to-date and ok, 
-                    # but update is needed
-                    self._logger.debug ('Getting the delta')
-                    delta = self._RemoteCaller.GetDelta ( lastrev, row['lastrev'] )            
-                    self._logger.debug ( "Using delta information" )
-                    tmpp,tmpf = os.path.split (filepath)
-                    tmpfile = os.path.join ( tmpp, '.'+tmpf+'-'+str(lastrev)+'.tmp')
-                    os.rename(filepath, tmpfile)
-                    delta.patch (tmpfile, filepath)
-                    os.remove(tmpfile)
-                else:
-                    if not isfolder:
-                        self._logger.debug('Getting the file (revision %s)' , str(lastrev) )
-                        data = self._RemoteCaller.GetFullRevision ( lastrev )
-                        with open ( filepath , "wb" ) as f:
-                            f.write(data.data)
-                    else:
-                        # Special case for directories
-                        self._logger.info('Creating folder %s', filepath)
-                        os.mkdir(filepath)
-                        modifiedTime = os.stat(filepath).st_mtime
-                        c.execute ('''insert into files 
-                            (path, file, lastrev, timestamp, localtime, isfolder)
-                            values (?,?,?,?,?,1)''' , 
-                            (path,file,lastrev,serverTimestamp,modifiedTime) 
-                            )
-                        continue
-                # check and save metadata
-                with open (filepath, "rb") as f:
-                    computedChksum = adler32(f.read())
-                computedSize = os.stat(filepath).st_size
-                modifiedTime = os.stat(filepath).st_mtime
-                if ( (  serverSize and   serverSize != computedSize  ) or
-                     (serverChksum and serverChksum != computedChksum) ):
-                    raise LocalError('Metadata error on received file %s' % filepath)
-                c.execute ('''insert into files 
-                    (path, file, lastrev, timestamp, localtime, chksum, size)
-                    values (?,?,?,?,?,?,?)''' , 
-                    (path,file,lastrev,serverTimestamp,modifiedTime,
-                        computedChksum, computedSize) 
-                    )
+            self.ServerCheckChanges(file, path, remotepath)
         self._lockTimestamp()
     
     def UpdateToServer(self):
@@ -554,4 +627,3 @@ class SingleRepoClient:
         '''
         os.chdir(self._localpath)
         self.CheckExistantFiles()
-        self.CheckDeletedFiles()

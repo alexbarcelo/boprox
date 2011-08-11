@@ -38,7 +38,9 @@ if __name__ == '__main__':
     
     adminrepo.UpdateToServer()
     adminrepo.UpdateFromServer()
+    print "Starting CheckDeletedFiles()"
+    adminrepo.CheckDeletedFiles()
     
-    print "Checking from johnsmith account"
-    firstrepo.UpdateToServer()
-    firstrepo.UpdateFromServer() 
+    #print "Checking from johnsmith account"
+    #firstrepo.UpdateToServer()
+    #firstrepo.UpdateFromServer() 

@@ -4,9 +4,9 @@ rm -rf ./hards/*
 rm -rf ./deltas/*
 
 rm -rf ./repoclient/*
-mkdir ./repoclient/johnsmith
+mkdir repoclient/johnsmith
 rm -rf ./repojohnsmith/*
 rm -rf ./hashesclient/*
 
-rm clientdb-*.sqlite
-rm file.sqlite
+rm  -f clientdb-*.sqlite
+rm  -f file.sqlite
