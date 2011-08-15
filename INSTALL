@@ -1,0 +1,22 @@
+Still no real installation mechanism.
+
+Server is boproxd.py
+See testingground/initserver.sh and testingground/testing.ini, they can be 
+used to start a listening and fully-functional deaemon. Soon I will provide
+some init.d samples, if you have a good init script I will be very grateful.
+
+This project doesn't have a fully-featured client, but the test code in 
+sampleClient.py is working as a one-shot-updater.
+
+Basic instructions:
+ 1) (Only first use): Check path of hashesdir and sqlite files (open the 
+    python code and change as needed). Create the folders. The default are:
+      ~/.boprox/                  # file configuration
+      ~/.boprox/hashesdir/        # internal hash directory
+      ~/boprox-repo               # working repository
+ 2) Run sampleClient.py
+ 3) Work normally on the repository folder.
+ 4) Jump to step 2 whenever you want to synchronize from and to the server.
+
+If you want to test an autoupdate client you can add a cron. Hourly cron
+is a conservative good choice.
