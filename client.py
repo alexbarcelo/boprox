@@ -266,54 +266,53 @@ class SingleRepoClient:
         # everything seems ok, return a full path that should be usable
         return os.path.join(self._localpath,path,file)
     
-    def _rm(self, path, file, remotepath):
+    def _rm(self, path, file, remotepath, openedconn):
         '''
         Remove a file. This sends the petition to the server and updates the
         database. Doesn't touch the filesystem.
         '''
-        with self._db as c:
-            row = c.execute ('''select idfile from files where 
-                path=? collate wincase and file=? collate wincase''',
-                (path,file) ).fetchone()
-            if not row:
-                self._logger.warning("File %s in path %s doesn't exist (database error)", 
-                    file, path)
-                raise LocalError('Trying to remove a not existing file (database error)')
-            idrev, tsnow = self._RemoteCaller.RmFile(remotepath,file)
-            c.execute ('''update files set deleted=1,lastrev=?,timestamp=?,localtime=NULL
-                where idfile=?''', (idrev, tsnow, row['idfile']) )
-        
-    def _rmdir(self, path, dir, remotepath):
+        row = openedconn.execute ('''select idfile from files where 
+            path=? collate wincase and file=? collate wincase''',
+            (path,file) ).fetchone()
+        if not row:
+            self._logger.warning("File %s in path %s doesn't exist (database error)", 
+                file, path)
+            raise LocalError('Trying to remove a not existing file (database error)')
+        idrev, tsnow = self._RemoteCaller.RmFile(remotepath,file)
+        openedconn.execute ('''update files set 
+            deleted=1,lastrev=?,timestamp=?,localtime=NULL
+            where idfile=?''', (idrev, tsnow, row['idfile']) )
+    
+    def _rmdir(self, path, dir, remotepath, openedconn):
         '''
         Remove a directory. This sends the petition to the server and updates
         the database. ``rm -rf'' the folder (but doesn't touch the filesystem).
         '''
-        with self._db as c:
-            folderRow = c.execute('''select idfile from files where
-                path=? collate wincase and file=? collate wincase''',
-                (path,dir) ).fetchone()
-            if not folderRow:
-                self._logger.warning("Folder %s in path %s doesn't exist (database error)",
-                    dir, path)
-                raise LocalError('Trying to remove a not existing folder (database error)')
-            extpath = os.path.join(path,dir)
-            cur = c.execute ('''select isfolder, deleted, path, file from files 
-                where path=? collate wincase''', (extpath,) )
-            for row in cur:
-                # Recursive removal
-                if row['isfolder'] and not row['deleted']:
-                    self._rmdir(extpath, row['file'], 
-                        os.path.join(remotepath,dir) )
-                # File removal, if necessary
-                elif row['deleted'] != True:
-                    self._logger.debug ( 'local path: %s -- local file: %s', 
-                        row['path'], row['file'])
-                    self._logger.debug('Remote path: %s', remotepath)
-                    self._rm(row['path'],row['file'], 
-                        os.path.join(remotepath,dir) )
-            idrev, tsnow = self._RemoteCaller.RmDir(remotepath, dir)
-            c.execute('''update files set deleted=1,lastrev=?,timestamp=?,localtime=NULL
-                where idfile=?''', (idrev, tsnow, folderRow['idfile']) )
+        folderRow = openedconn.execute('''select idfile from files where
+            path=? collate wincase and file=? collate wincase''',
+            (path,dir) ).fetchone()
+        if not folderRow:
+            self._logger.warning("Folder %s in path %s doesn't exist (database error)",
+                dir, path)
+            raise LocalError('Trying to remove a not existing folder (database error)')
+        extpath = os.path.join(path,dir)
+        cur = openedconn.execute ('''select isfolder, deleted, path, file from files 
+            where path=? collate wincase''', (extpath,) )
+        for row in cur:
+            # Recursive removal
+            if row['isfolder'] and not row['deleted']:
+                self._rmdir(extpath, row['file'], 
+                    os.path.join(remotepath,dir) )
+            # File removal, if necessary
+            elif row['deleted'] != True:
+                self._logger.debug ( 'local path: %s -- local file: %s', 
+                    row['path'], row['file'])
+                self._logger.debug('Remote path: %s', remotepath)
+                self._rm(row['path'],row['file'], 
+                    os.path.join(remotepath,dir) )
+        idrev, tsnow = self._RemoteCaller.RmDir(remotepath, dir)
+        openedconn.execute('''update files set deleted=1,lastrev=?,timestamp=?,localtime=NULL
+            where idfile=?''', (idrev, tsnow, folderRow['idfile']) )
         self._logger.info('Removed directory: %s', extpath)
     
     def ping(self):
@@ -583,17 +582,23 @@ class SingleRepoClient:
         '''
         The database is "walked" looking for missing files. 
         '''
-        cur = self._db.execute('select * from files order by path collate wincase')
-        for row in cur:
-            if row['deleted']:
-                continue
-            remotepath = os.path.join(self._remotepath, row['path'])
-            filepath = os.path.join(self._localpath, row['path'], row['file'])
-            if row['isfolder']:
-                if not os.path.isdir(filepath):
-                    self._rmdir(row['path'], row['file'], remotepath)
-            elif not os.path.isfile(filepath):
-                self._rm(row['path'], row['file'], remotepath)
+        with self._db as c:
+            cur = self._db.execute('select * from files order by path collate wincase')
+            for row in cur:
+                if row['deleted']:
+                    continue
+                remotepath = os.path.join(self._remotepath, row['path'])
+                filepath = os.path.join(self._localpath, row['path'], row['file'])
+                print 'a'
+                if row['isfolder']:
+                    print 'b'
+                    if not os.path.isdir(filepath):
+                        print 'c'
+                        self._rmdir(row['path'], row['file'], remotepath, c)
+                elif not os.path.isfile(filepath):
+                    print 'd'
+                    self._rm(row['path'], row['file'], remotepath, c)
+                print 'e'
     
     def UpdateFromServer(self):
         '''
