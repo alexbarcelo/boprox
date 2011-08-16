@@ -12,7 +12,7 @@ import auth
 
 import logging
 
-if __name__ == '__main__':
+def main():
     # First get the defaults
     config = ConfigParser.ConfigParser( {
         # Default values, dictionary
@@ -82,6 +82,9 @@ if __name__ == '__main__':
     boproxserver.register_instance(server.ServerInstance(boproxserver, config))
     
     sa = boproxserver.socket.getsockname()
-    print "Serving HTTPS on", sa[0], "port", sa[1]
+    logging.info ("Serving HTTPS on %s port %s", sa[0], str(sa[1]))
     
     boproxserver.serve_forever()
+
+if __name__ == '__main__':
+    main()

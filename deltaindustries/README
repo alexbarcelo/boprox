@@ -1,0 +1,7 @@
+Deltaindustries is boprox' project dependency package.
+
+This package provides all delta and hash mechanism for both the 
+boprox client and server. This deltas and hashes are computed 
+as they are needed by a rsync algorithm.
+
+For now it's a pure python package. This may change in some future.

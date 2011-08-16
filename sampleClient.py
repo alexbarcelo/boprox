@@ -5,7 +5,7 @@ Created on Aug 4, 2011
 @author: marius
 '''
 import sys
-import client
+import boprox.client
 from time import sleep
 import logging
 import os.path
@@ -23,11 +23,14 @@ HASHESDIR=os.path.join(HOME,DOTBOPROX,'hashesdir')
 
 logging.basicConfig(level=logging.INFO)
 
-if __name__ == '__main__':    
-    adminrepo = client.SingleRepoClient(host=HOST, port=PORT,
+def main():
+    adminrepo = boprox.client.SingleRepoClient(host=HOST, port=PORT,
         username='admin', permatoken=PASS, 
         dbfile=DBFILE, localpath=REPODIR, hashesdir=HASHESDIR)
     
     adminrepo.UpdateToServer()
     adminrepo.UpdateFromServer()
     adminrepo.CheckDeletedFiles()
+
+if __name__ == '__main__':
+    main()

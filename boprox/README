@@ -1,0 +1,8 @@
+The boprox namespace contains the public classes server and client
+(described in files server.py and client.py, respectively).
+
+There will rarely be a server AND a client on the same physical 
+machine.
+
+Both server and client requires the package deltaindustries, also
+provided by the boprox project.

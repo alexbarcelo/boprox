@@ -1,2 +1,5 @@
 *pyc
+dist
+build
 __pycache__
+boprox_server.egg-info

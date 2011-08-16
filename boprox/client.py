@@ -589,16 +589,11 @@ class SingleRepoClient:
                     continue
                 remotepath = os.path.join(self._remotepath, row['path'])
                 filepath = os.path.join(self._localpath, row['path'], row['file'])
-                print 'a'
                 if row['isfolder']:
-                    print 'b'
                     if not os.path.isdir(filepath):
-                        print 'c'
                         self._rmdir(row['path'], row['file'], remotepath, c)
                 elif not os.path.isfile(filepath):
-                    print 'd'
                     self._rm(row['path'], row['file'], remotepath, c)
-                print 'e'
     
     def UpdateFromServer(self):
         '''

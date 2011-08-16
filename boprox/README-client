@@ -1,0 +1,8 @@
+The boprox client is used to connect to a boprox server. 
+
+It synchronizes file with the server, and can manage all the client
+actions (revision control, rollbacks, updates, adding shares...).
+
+It's not a fully-featured client for end-users, is more a API that 
+handles all filesystem and network communication and authentication
+with the server.

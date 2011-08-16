@@ -1,0 +1,1 @@
+exclude boprox/client.py boprox/setup.py

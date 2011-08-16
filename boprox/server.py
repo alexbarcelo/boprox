@@ -45,7 +45,8 @@ class AuthXMLRPCServerTLS(SimpleXMLRPCServer):
         call, which is rewritten using TLS
         """
         self.logRequests = logRequests
-        self.userauth = userauth        
+        self.userauth = userauth
+        self._logger = logging.getLogger('XMLRPC')
 
         SimpleXMLRPCDispatcher.__init__(self, allow_none, encoding)
 
@@ -127,15 +128,16 @@ class AuthXMLRPCServerTLS(SimpleXMLRPCServer):
         SocketServer.BaseServer.__init__(self, addr, VerifyingRequestHandler)
         
         if not os.path.isfile(keyfile):
-            print "Keyfile", keyfile, "does not exist"
+            self._logger.error("Keyfile %s does not exist" , keyfile)
             exit(-55)
         
         if not os.path.isfile(certfile):
-            print "Certfile", certfile, "does not exist"
+            self._logger.error("Certfile %s does not exist" , certfile)
             exit(-56)
         
-        print "Using keyfile:", keyfile
-        print "Using certfile:", certfile
+        self._logger.info("Using  keyfile: %s", keyfile)
+        self._logger.info("Using certfile: %s", certfile)
+        
         self.socket = ssl.wrap_socket(
             socket.socket(self.address_family, self.socket_type),
             server_side=True,
