@@ -1,5 +1,0 @@
-The boprox_server provides the boprox server daemon. 
-
-This server should run in the central server, and all clients that 
-share the repository (or more than one if it's intended as a 
-multi-user server).
