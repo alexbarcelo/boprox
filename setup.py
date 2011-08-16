@@ -1,9 +1,6 @@
 from setuptools import setup
 import os, sys
 
-def read(fname):
-    return open(os.path.join(os.path.dirname(__file__), fname)).read()
-
 if sys.version_info < (2 , 6):
     requireSSL = '\nssl\n',
 else:
@@ -17,9 +14,18 @@ setup (
     author_email='alex.barcelo@gmail.com',
     url='http://boprox.net',
     packages = ['boprox'],
-    long_description = read( os.path.join('boprox','README-server') ),
+    long_description = """The boprox_server provides the boprox server daemon. 
+
+This server should run in the central server, and all clients that 
+share the repository (or more than one if it's intended as a 
+multi-user server).
+""",
     license = 'GPL',
+    dependency_links = [
+        'http://sourceforge.net/projects/boprox/files/deltaindustries/'
+        ],
     install_requires = """
+        deltaindustries >= 0.1
         rsa >= 1.0.0
         pyasn1 >= 0.0.1""" + requireSSL,
     entry_points = {
