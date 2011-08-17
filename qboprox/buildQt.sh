@@ -1,6 +1,6 @@
 #!/bin/bash
 
-pyuic4 main.ui > main.py
-pyuic4 about.ui > about.py
+pyuic4 -o main.py  main.ui
+pyuic4 -o about.py about.ui
 
-pyrcc4 resources.qrc > resources.py
+pyrcc4 -o resources.py resources.qrc
