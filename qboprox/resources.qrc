@@ -1,4 +1,6 @@
 <RCC>
-  <qresource prefix="html">
+  <qresource prefix="html"/>
+  <qresource prefix="icons">
+    <file>tray.svg</file>
   </qresource>
 </RCC>

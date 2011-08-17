@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>740</width>
-    <height>522</height>
+    <height>523</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -69,7 +69,7 @@
     <property name="title">
      <string>File</string>
     </property>
-    <addaction name="actionHide"/>
+    <addaction name="actionClose"/>
     <addaction name="separator"/>
     <addaction name="actionQuit"/>
    </widget>
@@ -82,14 +82,14 @@
       <string>Force local update</string>
      </property>
      <addaction name="separator"/>
-     <addaction name="actionAll_repositories"/>
+     <addaction name="actionUpdateAll"/>
     </widget>
     <widget class="QMenu" name="menuRecalculate_checksums">
      <property name="title">
       <string>Recalculate checksums</string>
      </property>
      <addaction name="separator"/>
-     <addaction name="actionAll_repositories_2"/>
+     <addaction name="actionChecksumAll"/>
     </widget>
     <addaction name="menuForceUpdate"/>
     <addaction name="menuRecalculate_checksums"/>
@@ -114,11 +114,20 @@
     </property>
     <addaction name="actionAbout"/>
    </widget>
+   <widget class="QMenu" name="menuTrayIcon">
+    <property name="title">
+     <string>TrayIcon</string>
+    </property>
+    <addaction name="trayRefresh"/>
+    <addaction name="separator"/>
+    <addaction name="trayQuit"/>
+   </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
    <addaction name="menuView"/>
    <addaction name="menuSettings"/>
    <addaction name="menuHelp"/>
+   <addaction name="menuTrayIcon"/>
   </widget>
   <action name="actionQuit">
    <property name="text">
@@ -152,7 +161,7 @@
     <string>Preferences</string>
    </property>
   </action>
-  <action name="actionAll_repositories">
+  <action name="actionUpdateAll">
    <property name="text">
     <string>All repositories</string>
    </property>
@@ -162,7 +171,7 @@
     <string>About qboprox</string>
    </property>
   </action>
-  <action name="actionAll_repositories_2">
+  <action name="actionChecksumAll">
    <property name="text">
     <string>All repositories</string>
    </property>
@@ -172,9 +181,44 @@
     <string>Repository list</string>
    </property>
   </action>
+  <action name="trayRefresh">
+   <property name="text">
+    <string>Refresh</string>
+   </property>
+  </action>
+  <action name="trayQuit">
+   <property name="text">
+    <string>Quit</string>
+   </property>
+  </action>
+  <action name="actionClose">
+   <property name="text">
+    <string>Close</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+W</string>
+   </property>
+  </action>
  </widget>
  <resources>
   <include location="resources.qrc"/>
  </resources>
- <connections/>
+ <connections>
+  <connection>
+   <sender>actionClose</sender>
+   <signal>activated()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>close()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>369</x>
+     <y>261</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>
