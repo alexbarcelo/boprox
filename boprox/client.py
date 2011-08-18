@@ -9,7 +9,8 @@ from pyasn1.codec.der.decoder import decode as derdecode
 from base64 import b64decode
 from xmlrpclib import ServerProxy, Binary, ProtocolError
 import sqlite3
-import os.path
+import os
+import posixpath
 from datetime import datetime
 from zlib import adler32
 import logging
@@ -173,9 +174,9 @@ class SingleRepoClient:
         self._host = host
         self._port = port
         self._username = username
-        self._localpath  = os.path.abspath(localpath)
+        self._localpath  = posixpath.abspath(localpath)
         self._remotepath = remotepath
-        self._hashesdir = os.path.abspath(hashesdir)
+        self._hashesdir = posixpath.abspath(hashesdir)
         
         # initialize logging facility
         self._logger = logging.getLogger('boproxclient')
@@ -240,7 +241,7 @@ class SingleRepoClient:
         spath = path[len(self._remotepath):].lstrip('/')
         if spath == '':
             return ''
-        path1, path2 = os.path.split(spath)
+        path1, path2 = posixpath.split(spath)
         with self._db as c:
             row = c.execute ('''select idfile from files where
                 path=? collate wincase and
@@ -264,7 +265,7 @@ class SingleRepoClient:
         '''
         Sanitize.ProcessFile(path, file)
         # everything seems ok, return a full path that should be usable
-        return os.path.join(self._localpath,path,file)
+        return posixpath.join(self._localpath,path,file)
     
     def _rm(self, path, file, remotepath, openedconn):
         '''
@@ -295,21 +296,21 @@ class SingleRepoClient:
             self._logger.warning("Folder %s in path %s doesn't exist (database error)",
                 dir, path)
             raise LocalError('Trying to remove a not existing folder (database error)')
-        extpath = os.path.join(path,dir)
+        extpath = posixpath.join(path,dir)
         cur = openedconn.execute ('''select isfolder, deleted, path, file from files 
             where path=? collate wincase''', (extpath,) )
         for row in cur:
             # Recursive removal
             if row['isfolder'] and not row['deleted']:
                 self._rmdir(extpath, row['file'], 
-                    os.path.join(remotepath,dir) )
+                    posixpath.join(remotepath,dir) )
             # File removal, if necessary
             elif row['deleted'] != True:
                 self._logger.debug ( 'local path: %s -- local file: %s', 
                     row['path'], row['file'])
                 self._logger.debug('Remote path: %s', remotepath)
                 self._rm(row['path'],row['file'], 
-                    os.path.join(remotepath,dir) )
+                    posixpath.join(remotepath,dir) )
         idrev, tsnow = self._RemoteCaller.RmDir(remotepath, dir)
         openedconn.execute('''update files set deleted=1,lastrev=?,timestamp=?,localtime=NULL
             where idfile=?''', (idrev, tsnow, folderRow['idfile']) )
@@ -371,14 +372,14 @@ class SingleRepoClient:
         @param remotedir: The remote counterpart of dirpath
         @param rowinfo: A database row with metainfo of the file
         '''
-        localfile = os.path.join(dirpath,filecheck)
+        localfile = posixpath.join(dirpath,filecheck)
         modifiedTime = os.stat(localfile).st_mtime
         computedSize = os.stat(localfile).st_size    
         if ( rowInfo['localtime'] != modifiedTime or
                  rowInfo['size']  != computedSize ):
             # Here! Some file needs care
             self._logger.info('Detected modified file: %s' , localfile )
-            hashes = Hashes.open(os.path.join(
+            hashes = Hashes.open(posixpath.join(
                 self._hashesdir, str(rowInfo['idfile'] )))    
             # Get size
             computedSize = os.stat(localfile).st_size
@@ -405,7 +406,7 @@ class SingleRepoClient:
             # update the hashes
             self._logger.debug ( "Updating hash file %s" , str(rowInfo['idfile']) )
             hash = Hashes.eval(localfile)
-            hash.save(os.path.join(self._hashesdir, str(rowInfo['idfile']) ))
+            hash.save(posixpath.join(self._hashesdir, str(rowInfo['idfile']) ))
         else:
             self._logger.debug('No changes found for file:%s (path:%s)'
                 % (filecheck,dirpath) )
@@ -418,7 +419,7 @@ class SingleRepoClient:
         @param dirpath: Must be a correct relative path where file is
         @param remotedir: The remote counterpart of dirpath
         '''
-        localfile = os.path.join(dirpath,filecheck)
+        localfile = posixpath.join(dirpath,filecheck)
         modifiedTime = os.stat(localfile).st_mtime
         computedSize = os.stat(localfile).st_size    
         self._logger.info('Detected new file: %s' , localfile )
@@ -456,7 +457,7 @@ class SingleRepoClient:
             fileId = cur.lastrowid
         # Save the hashes for later use
         hashes = Hashes.eval(localfile)
-        hashes.save(os.path.join(self._hashesdir, str(fileId) ))
+        hashes.save(posixpath.join(self._hashesdir, str(fileId) ))
     
     def ServerCheckChanges(self, file, path, remotepath):
         '''
@@ -488,7 +489,7 @@ class SingleRepoClient:
                 if row['isfolder'] or isfolder:
                     raise LocalError('Server and client inconsistent with '+
                         'folder/file %s' , filepath)
-                if not os.path.exists(filepath):
+                if not posixpath.exists(filepath):
                     self._logger.warning('File %s locally deleted', filepath)
                     raise LocalError('The server updated a locally-deleted file')
                 self._logger.debug ('Checking that size and mtime of local file')
@@ -503,8 +504,8 @@ class SingleRepoClient:
                 self._logger.debug ('Getting the delta')
                 delta = self._RemoteCaller.GetDelta ( lastrev, row['lastrev'] )            
                 self._logger.debug ( "Using delta information" )
-                tmpp,tmpf = os.path.split (filepath)
-                tmpfile = os.path.join ( tmpp, '.'+tmpf+'-'+str(lastrev)+'.tmp')
+                tmpp,tmpf = posixpath.split (filepath)
+                tmpfile = posixpath.join ( tmpp, '.'+tmpf+'-'+str(lastrev)+'.tmp')
                 os.rename(filepath, tmpfile)
                 delta.patch (tmpfile, filepath)
                 os.remove(tmpfile)
@@ -546,13 +547,13 @@ class SingleRepoClient:
         (the caller should previously chdir to localpath).
         '''
         for walkpath, dirnames, filenames in os.walk('.'):
-            dirpath = os.path.normpath(walkpath)
+            dirpath = posixpath.normpath(walkpath)
             if dirpath == '.': dirpath = ''
-            remotedir = os.path.normpath(os.path.join (self._remotepath, dirpath))
+            remotedir = posixpath.normpath(posixpath.join (self._remotepath, dirpath))
             if remotedir == '.': remotedir = ''
             # first, eliminate directories which haven't been modified
             for dircheck in _fileAcceptor(dirnames):
-                modifiedTime = os.stat(os.path.join(dirpath,dircheck)).st_mtime
+                modifiedTime = os.stat(posixpath.join(dirpath,dircheck)).st_mtime
                 row = self._db.execute ( '''select localtime from files where
                     path=? and file=? and isfolder=1''', 
                     (dirpath,dircheck) ).fetchone()
@@ -587,12 +588,12 @@ class SingleRepoClient:
             for row in cur:
                 if row['deleted']:
                     continue
-                remotepath = os.path.join(self._remotepath, row['path'])
-                filepath = os.path.join(self._localpath, row['path'], row['file'])
+                remotepath = posixpath.join(self._remotepath, row['path'])
+                filepath = posixpath.join(self._localpath, row['path'], row['file'])
                 if row['isfolder']:
-                    if not os.path.isdir(filepath):
+                    if not posixpath.isdir(filepath):
                         self._rmdir(row['path'], row['file'], remotepath, c)
-                elif not os.path.isfile(filepath):
+                elif not posixpath.isfile(filepath):
                     self._rm(row['path'], row['file'], remotepath, c)
     
     def UpdateFromServer(self):
