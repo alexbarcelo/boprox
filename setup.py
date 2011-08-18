@@ -14,6 +14,7 @@ setup (
     author_email='alex.barcelo@gmail.com',
     url='http://boprox.net',
     packages = ['boprox'],
+    provides = ['boprox.Sanitize'],
     long_description = """The boprox_server provides the boprox server daemon. 
 
 This server should run in the central server, and all clients that 

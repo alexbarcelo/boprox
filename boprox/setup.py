@@ -10,6 +10,7 @@ setup (
     url='http://boprox.net',
     package_dir= {'boprox': ''},
     py_modules = ['boprox.client', 'boprox.Sanitize'],
+    provides = ['boprox.Sanitize'],
     long_description = """The boprox client is used to connect to a boprox server. 
 
 It synchronizes file with the server, and can manage all the client
