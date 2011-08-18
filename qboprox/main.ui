@@ -6,62 +6,84 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>740</width>
-    <height>523</height>
+    <width>680</width>
+    <height>365</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>qboprox</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0">
-     <widget class="QTreeView" name="fileTree">
-      <property name="minimumSize">
-       <size>
-        <width>200</width>
-        <height>0</height>
-       </size>
-      </property>
-     </widget>
-    </item>
-    <item row="0" column="2">
-     <widget class="QTextBrowser" name="descriptionText">
-      <property name="minimumSize">
-       <size>
-        <width>200</width>
-        <height>0</height>
-       </size>
-      </property>
-      <property name="openLinks">
-       <bool>false</bool>
-      </property>
-     </widget>
-    </item>
-    <item row="0" column="1">
-     <spacer name="horizontalSpacer">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QSplitter" name="splitter">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
       </property>
-      <property name="sizeType">
-       <enum>QSizePolicy::Fixed</enum>
+      <property name="handleWidth">
+       <number>10</number>
       </property>
-      <property name="sizeHint" stdset="0">
-       <size>
-        <width>15</width>
-        <height>400</height>
-       </size>
-      </property>
-     </spacer>
+      <widget class="QWidget" name="gridLayoutWidget">
+       <layout class="QGridLayout" name="gridLayout">
+        <item row="0" column="1">
+         <widget class="QComboBox" name="repoComboBox">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="Minimum">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="repoLabel">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>Active repository:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0" colspan="2">
+         <widget class="QTreeView" name="fileTree">
+          <property name="minimumSize">
+           <size>
+            <width>300</width>
+            <height>0</height>
+           </size>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QTextBrowser" name="descriptionText">
+       <property name="minimumSize">
+        <size>
+         <width>350</width>
+         <height>300</height>
+        </size>
+       </property>
+       <property name="openLinks">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </widget>
     </item>
    </layout>
+   <zorder>descriptionText</zorder>
+   <zorder>gridLayoutWidget</zorder>
+   <zorder>fileTree</zorder>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>740</width>
+     <width>680</width>
      <height>25</height>
     </rect>
    </property>
@@ -84,7 +106,7 @@
      <addaction name="separator"/>
      <addaction name="actionUpdateAll"/>
     </widget>
-    <widget class="QMenu" name="menuRecalculate_checksums">
+    <widget class="QMenu" name="menuChecksums">
      <property name="title">
       <string>Recalculate checksums</string>
      </property>
@@ -92,7 +114,7 @@
      <addaction name="actionChecksumAll"/>
     </widget>
     <addaction name="menuForceUpdate"/>
-    <addaction name="menuRecalculate_checksums"/>
+    <addaction name="menuChecksums"/>
    </widget>
    <widget class="QMenu" name="menuView">
     <property name="title">
@@ -104,7 +126,7 @@
     <property name="title">
      <string>Settings</string>
     </property>
-    <addaction name="actionRepository_list"/>
+    <addaction name="actionRepositoryList"/>
     <addaction name="separator"/>
     <addaction name="actionPreferences"/>
    </widget>
@@ -118,6 +140,7 @@
     <property name="title">
      <string>TrayIcon</string>
     </property>
+    <addaction name="trayShow"/>
     <addaction name="trayRefresh"/>
     <addaction name="separator"/>
     <addaction name="trayQuit"/>
@@ -129,6 +152,7 @@
    <addaction name="menuHelp"/>
    <addaction name="menuTrayIcon"/>
   </widget>
+  <widget class="QStatusBar" name="statusBar"/>
   <action name="actionQuit">
    <property name="text">
     <string>Quit</string>
@@ -146,14 +170,6 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
-   </property>
-  </action>
-  <action name="actionHide">
-   <property name="text">
-    <string>Hide</string>
-   </property>
-   <property name="shortcut">
-    <string>Ctrl+H</string>
    </property>
   </action>
   <action name="actionPreferences">
@@ -176,7 +192,7 @@
     <string>All repositories</string>
    </property>
   </action>
-  <action name="actionRepository_list">
+  <action name="actionRepositoryList">
    <property name="text">
     <string>Repository list</string>
    </property>
@@ -197,6 +213,11 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+W</string>
+   </property>
+  </action>
+  <action name="trayShow">
+   <property name="text">
+    <string>Show</string>
    </property>
   </action>
  </widget>

@@ -47,7 +47,7 @@
     <set>QDialogButtonBox::Ok</set>
    </property>
   </widget>
-  <widget class="QLabel" name="label">
+  <widget class="QLabel" name="mainLabel">
    <property name="geometry">
     <rect>
      <x>20</x>
@@ -77,7 +77,7 @@ p, li { white-space: pre-wrap; }
     <bool>true</bool>
    </property>
   </widget>
-  <widget class="QLabel" name="label_2">
+  <widget class="QLabel" name="titleLabel">
    <property name="geometry">
     <rect>
      <x>10</x>
