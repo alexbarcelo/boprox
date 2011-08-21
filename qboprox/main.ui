@@ -74,9 +74,6 @@
      </widget>
     </item>
    </layout>
-   <zorder>descriptionText</zorder>
-   <zorder>gridLayoutWidget</zorder>
-   <zorder>fileTree</zorder>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
