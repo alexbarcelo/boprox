@@ -11,8 +11,10 @@ def main():
     import sys    
     app = QtGui.QApplication(sys.argv)
     # this window is managed on its own
-    qboproxMainWindow()
+    MW = qboproxMainWindow()
     sys.exit(app.exec_())
+    if MW:
+        del (MW)
 
 if __name__ == '__main__':
     main()

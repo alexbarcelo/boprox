@@ -46,15 +46,14 @@ class RepoWorker(QtCore.QThread):
     
     def _setTimers(self):
         trefresh = self._settings.value('refresh', 600).toPyObject()
-        tlocalcheck = self._settings.value('localcheck', 60).toPyObject()
-        
+        tlocalcheck = self._settings.value('localcheck', 60).toPyObject()        
         if tlocalcheck > 0:
             self._timerl = QtCore.QTimer(self)
             self._timerl.timeout.connect(self._localcheckRepo)
-            self._timerl.start(tlocalcheck)
+            self._timerl.start(tlocalcheck*1000)
         self._timerr = QtCore.QTimer(self)
         self._timerr.timeout.connect(self._refreshRepo)
-        self._timerr.start(trefresh)
+        self._timerr.start(trefresh*1000)
     
     def _setWatcher(self):
         pass

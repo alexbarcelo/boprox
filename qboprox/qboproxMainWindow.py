@@ -8,8 +8,8 @@ from PyQt4 import QtGui, QtCore
 
 from about import Ui_About
 from main import Ui_MainWindow
-
-import boprox
+from repositories import Ui_repoListDialog
+from repoconfig import Ui_repoConfig
 
 class qboproxMainWindow(QtGui.QMainWindow):
     '''
@@ -23,6 +23,33 @@ class qboproxMainWindow(QtGui.QMainWindow):
         ui = Ui_About()
         ui.setupUi(DialogAbout)
         DialogAbout.show()
+    
+    def displayRepoList(self):
+        DialogRepoList = QtGui.QDialog(self)
+        ui = Ui_repoListDialog()
+        ui.setupUi(DialogRepoList)
+        
+        def displayRepoConfigAdd ():
+            DialogRepoConfig = QtGui.QDialog(DialogRepoList)
+            uiConfig = Ui_repoConfig()
+            uiConfig.setupUi(DialogRepoConfig)
+            # set Ok/Cancel connections
+            # TODO 
+            DialogRepoConfig.show()
+            
+        def displayRepoConfigEdit ():
+            DialogRepoConfig = QtGui.QDialog(DialogRepoList)
+            uiConfig = Ui_repoConfig()
+            uiConfig.setupUi(DialogRepoConfig)
+            # set all the information
+            # TODO
+            # set Ok/Cancel connections
+            # TODO 
+            DialogRepoConfig.show()
+            
+        ui.addButton.clicked.connect(displayRepoConfigAdd)
+        ui.editButton.clicked.connect(displayRepoConfigEdit)
+        DialogRepoList.show()
         
     def triggerRefresh(self):
         pass
@@ -38,12 +65,12 @@ class qboproxMainWindow(QtGui.QMainWindow):
                 self.show()
     
     def closeEvent(self, event):
-        print 'a'
         self.setVisible(False)
         event.ignore()
         
     def connectMySlots(self):
         self.mainUi.actionRefresh.activated.connect(self.triggerRefresh)
+        self.mainUi.actionRepositoryList.activated.connect(self.displayRepoList)
         self.mainUi.trayRefresh.activated.connect(self.triggerRefresh)
         self.mainUi.trayShow.activated.connect(self.show)
         self.mainUi.actionAbout.activated.connect(self.displayAbout)
@@ -70,8 +97,6 @@ class qboproxMainWindow(QtGui.QMainWindow):
         apply(QtGui.QMainWindow.__init__, (self,) + args)
         self.mainUi = Ui_MainWindow()
         self.mainUi.setupUi(self)
-        
         self.createTray()
         self.connectMySlots()
-        
         self.show()
