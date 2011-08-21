@@ -8,7 +8,7 @@ else:
 
 setup (
     name = "boprox_server",
-    version = "0.1",
+    version = "0.2.1",
     description="",
     author='Alex Barcelo',
     author_email='alex.barcelo@gmail.com',
