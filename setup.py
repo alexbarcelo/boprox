@@ -9,13 +9,13 @@ else:
 setup (
     name = "boprox_server",
     version = "0.2.1",
-    description="",
+    description="Server package for the boprox project",
     author='Alex Barcelo',
     author_email='alex.barcelo@gmail.com',
     url='http://boprox.net',
     packages = ['boprox'],
     provides = ['boprox.Sanitize'],
-    long_description = """The boprox_server provides the boprox server daemon. 
+    long_description = """The boprox_server provides the boprox server daemon.
 
 This server should run in the central server, and all clients that 
 share the repository (or more than one if it's intended as a 

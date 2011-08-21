@@ -3,8 +3,8 @@ import os
 
 setup (
     name = "boprox_client",
-    version = "0.1",
-    description="",
+    version = "0.2.1",
+    description="Client API package for the boprox project",
     author='Alex Barcelo',
     author_email='alex.barcelo@gmail.com',
     url='http://boprox.net',
@@ -16,9 +16,10 @@ setup (
 It synchronizes file with the server, and can manage all the client
 actions (revision control, rollbacks, updates, adding shares...).
 
-It's not a fully-featured client for end-users, is more a API that 
+It's not a fully-featured client for end-users, it's an API that 
 handles all filesystem and network communication and authentication
-with the server.
+with the server. See the project page for more information about
+user-friendly clients.
 """,
     license = 'GPL',
     dependency_links = [
