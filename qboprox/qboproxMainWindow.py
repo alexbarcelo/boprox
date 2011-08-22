@@ -5,10 +5,14 @@ Created on Aug 18, 2011
 '''
 
 from PyQt4 import QtGui, QtCore
+import re
+import string
 
 from about import Ui_About
 from main import Ui_MainWindow
 from repositories import Ui_repoListDialog
+from qrepoconfig import QRepoConfig
+
 from repoconfig import Ui_repoConfig
 
 class qboproxMainWindow(QtGui.QMainWindow):
@@ -27,26 +31,19 @@ class qboproxMainWindow(QtGui.QMainWindow):
     def displayRepoList(self):
         DialogRepoList = QtGui.QDialog(self)
         ui = Ui_repoListDialog()
-        ui.setupUi(DialogRepoList)
+        ui.setupUi(DialogRepoList)         
         
         def displayRepoConfigAdd ():
-            DialogRepoConfig = QtGui.QDialog(DialogRepoList)
-            uiConfig = Ui_repoConfig()
-            uiConfig.setupUi(DialogRepoConfig)
-            # set Ok/Cancel connections
-            # TODO 
-            DialogRepoConfig.show()
+            DialogRepoConfig.addRepo()
             
         def displayRepoConfigEdit ():
-            DialogRepoConfig = QtGui.QDialog(DialogRepoList)
-            uiConfig = Ui_repoConfig()
-            uiConfig.setupUi(DialogRepoConfig)
             # set all the information
             # TODO
-            # set Ok/Cancel connections
-            # TODO 
-            DialogRepoConfig.show()
+            DialogRepoConfig.editRepo(str(ui.repoList.item(
+                ui.repoList.currentRow(), 0 ).data(0).toPyObject() ))
             
+        # prepare this, just in case
+        DialogRepoConfig = QRepoConfig(DialogRepoList)        
         ui.addButton.clicked.connect(displayRepoConfigAdd)
         ui.editButton.clicked.connect(displayRepoConfigEdit)
         DialogRepoList.show()

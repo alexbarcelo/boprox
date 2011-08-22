@@ -29,13 +29,22 @@
    <item>
     <widget class="QTableWidget" name="repoList">
      <property name="editTriggers">
-      <set>QAbstractItemView::DoubleClicked|QAbstractItemView::EditKeyPressed</set>
+      <set>QAbstractItemView::NoEditTriggers</set>
+     </property>
+     <property name="selectionMode">
+      <enum>QAbstractItemView::SingleSelection</enum>
+     </property>
+     <property name="selectionBehavior">
+      <enum>QAbstractItemView::SelectRows</enum>
      </property>
      <property name="rowCount">
-      <number>0</number>
+      <number>1</number>
      </property>
      <attribute name="horizontalHeaderVisible">
       <bool>true</bool>
+     </attribute>
+     <attribute name="horizontalHeaderHighlightSections">
+      <bool>false</bool>
      </attribute>
      <attribute name="horizontalHeaderMinimumSectionSize">
       <number>50</number>
@@ -46,6 +55,14 @@
      <attribute name="verticalHeaderVisible">
       <bool>false</bool>
      </attribute>
+     <attribute name="verticalHeaderHighlightSections">
+      <bool>false</bool>
+     </attribute>
+     <row>
+      <property name="text">
+       <string>0</string>
+      </property>
+     </row>
      <column>
       <property name="text">
        <string>Name</string>
@@ -61,6 +78,21 @@
        <string>Host</string>
       </property>
      </column>
+     <item row="0" column="0">
+      <property name="text">
+       <string>testnane</string>
+      </property>
+     </item>
+     <item row="0" column="1">
+      <property name="text">
+       <string>/test/path</string>
+      </property>
+     </item>
+     <item row="0" column="2">
+      <property name="text">
+       <string>testhost.com</string>
+      </property>
+     </item>
     </widget>
    </item>
    <item>

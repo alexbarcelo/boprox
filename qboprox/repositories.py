@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'repositories.ui'
 #
-# Created: Sun Aug 21 16:29:37 2011
+# Created: Mon Aug 22 12:23:06 2011
 #      by: PyQt4 UI code generator 4.8.3
 #
 # WARNING! All changes made in this file will be lost!
@@ -23,21 +23,33 @@ class Ui_repoListDialog(object):
         self.verticalLayout = QtGui.QVBoxLayout(repoListDialog)
         self.verticalLayout.setObjectName(_fromUtf8("verticalLayout"))
         self.repoList = QtGui.QTableWidget(repoListDialog)
-        self.repoList.setEditTriggers(QtGui.QAbstractItemView.DoubleClicked|QtGui.QAbstractItemView.EditKeyPressed)
-        self.repoList.setRowCount(0)
+        self.repoList.setEditTriggers(QtGui.QAbstractItemView.NoEditTriggers)
+        self.repoList.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
+        self.repoList.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
+        self.repoList.setRowCount(1)
         self.repoList.setObjectName(_fromUtf8("repoList"))
         self.repoList.setColumnCount(3)
-        self.repoList.setRowCount(0)
+        self.repoList.setRowCount(1)
+        item = QtGui.QTableWidgetItem()
+        self.repoList.setVerticalHeaderItem(0, item)
         item = QtGui.QTableWidgetItem()
         self.repoList.setHorizontalHeaderItem(0, item)
         item = QtGui.QTableWidgetItem()
         self.repoList.setHorizontalHeaderItem(1, item)
         item = QtGui.QTableWidgetItem()
         self.repoList.setHorizontalHeaderItem(2, item)
+        item = QtGui.QTableWidgetItem()
+        self.repoList.setItem(0, 0, item)
+        item = QtGui.QTableWidgetItem()
+        self.repoList.setItem(0, 1, item)
+        item = QtGui.QTableWidgetItem()
+        self.repoList.setItem(0, 2, item)
         self.repoList.horizontalHeader().setVisible(True)
+        self.repoList.horizontalHeader().setHighlightSections(False)
         self.repoList.horizontalHeader().setMinimumSectionSize(50)
         self.repoList.horizontalHeader().setStretchLastSection(True)
         self.repoList.verticalHeader().setVisible(False)
+        self.repoList.verticalHeader().setHighlightSections(False)
         self.verticalLayout.addWidget(self.repoList)
         self.horizontalLayout = QtGui.QHBoxLayout()
         self.horizontalLayout.setObjectName(_fromUtf8("horizontalLayout"))
@@ -60,9 +72,16 @@ class Ui_repoListDialog(object):
 
     def retranslateUi(self, repoListDialog):
         repoListDialog.setWindowTitle(QtGui.QApplication.translate("repoListDialog", "Repositories", None, QtGui.QApplication.UnicodeUTF8))
+        self.repoList.verticalHeaderItem(0).setText(QtGui.QApplication.translate("repoListDialog", "0", None, QtGui.QApplication.UnicodeUTF8))
         self.repoList.horizontalHeaderItem(0).setText(QtGui.QApplication.translate("repoListDialog", "Name", None, QtGui.QApplication.UnicodeUTF8))
         self.repoList.horizontalHeaderItem(1).setText(QtGui.QApplication.translate("repoListDialog", "Path", None, QtGui.QApplication.UnicodeUTF8))
         self.repoList.horizontalHeaderItem(2).setText(QtGui.QApplication.translate("repoListDialog", "Host", None, QtGui.QApplication.UnicodeUTF8))
+        __sortingEnabled = self.repoList.isSortingEnabled()
+        self.repoList.setSortingEnabled(False)
+        self.repoList.item(0, 0).setText(QtGui.QApplication.translate("repoListDialog", "testnane", None, QtGui.QApplication.UnicodeUTF8))
+        self.repoList.item(0, 1).setText(QtGui.QApplication.translate("repoListDialog", "/test/path", None, QtGui.QApplication.UnicodeUTF8))
+        self.repoList.item(0, 2).setText(QtGui.QApplication.translate("repoListDialog", "testhost.com", None, QtGui.QApplication.UnicodeUTF8))
+        self.repoList.setSortingEnabled(__sortingEnabled)
         self.addButton.setText(QtGui.QApplication.translate("repoListDialog", "Add repository", None, QtGui.QApplication.UnicodeUTF8))
         self.editButton.setText(QtGui.QApplication.translate("repoListDialog", "Edit repository", None, QtGui.QApplication.UnicodeUTF8))
         self.closeButton.setText(QtGui.QApplication.translate("repoListDialog", "Close", None, QtGui.QApplication.UnicodeUTF8))

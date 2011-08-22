@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'repoconfig.ui'
 #
-# Created: Sun Aug 21 16:29:37 2011
+# Created: Mon Aug 22 12:23:06 2011
 #      by: PyQt4 UI code generator 4.8.3
 #
 # WARNING! All changes made in this file will be lost!
@@ -139,7 +139,7 @@ class Ui_repoConfig(object):
         self.verticalLayout.addWidget(self.buttonBox)
 
         self.retranslateUi(repoConfig)
-        self.tabWidget.setCurrentIndex(1)
+        self.tabWidget.setCurrentIndex(0)
         QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL(_fromUtf8("accepted()")), repoConfig.accept)
         QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL(_fromUtf8("rejected()")), repoConfig.reject)
         QtCore.QObject.connect(self.comboBoxAuthType, QtCore.SIGNAL(_fromUtf8("currentIndexChanged(int)")), self.stackedWidget.setCurrentIndex)
