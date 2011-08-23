@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'repositories.ui'
 #
-# Created: Mon Aug 22 12:23:06 2011
+# Created: Tue Aug 23 18:38:46 2011
 #      by: PyQt4 UI code generator 4.8.3
 #
 # WARNING! All changes made in this file will be lost!
@@ -17,9 +17,9 @@ except AttributeError:
 class Ui_repoListDialog(object):
     def setupUi(self, repoListDialog):
         repoListDialog.setObjectName(_fromUtf8("repoListDialog"))
-        repoListDialog.resize(450, 200)
-        repoListDialog.setMinimumSize(QtCore.QSize(450, 200))
-        repoListDialog.setMaximumSize(QtCore.QSize(450, 200))
+        repoListDialog.resize(500, 200)
+        repoListDialog.setMinimumSize(QtCore.QSize(500, 200))
+        repoListDialog.setMaximumSize(QtCore.QSize(500, 200))
         self.verticalLayout = QtGui.QVBoxLayout(repoListDialog)
         self.verticalLayout.setObjectName(_fromUtf8("verticalLayout"))
         self.repoList = QtGui.QTableWidget(repoListDialog)
@@ -28,7 +28,7 @@ class Ui_repoListDialog(object):
         self.repoList.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
         self.repoList.setRowCount(1)
         self.repoList.setObjectName(_fromUtf8("repoList"))
-        self.repoList.setColumnCount(3)
+        self.repoList.setColumnCount(4)
         self.repoList.setRowCount(1)
         item = QtGui.QTableWidgetItem()
         self.repoList.setVerticalHeaderItem(0, item)
@@ -39,11 +39,15 @@ class Ui_repoListDialog(object):
         item = QtGui.QTableWidgetItem()
         self.repoList.setHorizontalHeaderItem(2, item)
         item = QtGui.QTableWidgetItem()
+        self.repoList.setHorizontalHeaderItem(3, item)
+        item = QtGui.QTableWidgetItem()
         self.repoList.setItem(0, 0, item)
         item = QtGui.QTableWidgetItem()
         self.repoList.setItem(0, 1, item)
         item = QtGui.QTableWidgetItem()
         self.repoList.setItem(0, 2, item)
+        item = QtGui.QTableWidgetItem()
+        self.repoList.setItem(0, 3, item)
         self.repoList.horizontalHeader().setVisible(True)
         self.repoList.horizontalHeader().setHighlightSections(False)
         self.repoList.horizontalHeader().setMinimumSectionSize(50)
@@ -59,6 +63,9 @@ class Ui_repoListDialog(object):
         self.editButton = QtGui.QPushButton(repoListDialog)
         self.editButton.setObjectName(_fromUtf8("editButton"))
         self.horizontalLayout.addWidget(self.editButton)
+        self.delButton = QtGui.QPushButton(repoListDialog)
+        self.delButton.setObjectName(_fromUtf8("delButton"))
+        self.horizontalLayout.addWidget(self.delButton)
         spacerItem = QtGui.QSpacerItem(40, 20, QtGui.QSizePolicy.Expanding, QtGui.QSizePolicy.Minimum)
         self.horizontalLayout.addItem(spacerItem)
         self.closeButton = QtGui.QPushButton(repoListDialog)
@@ -76,13 +83,16 @@ class Ui_repoListDialog(object):
         self.repoList.horizontalHeaderItem(0).setText(QtGui.QApplication.translate("repoListDialog", "Name", None, QtGui.QApplication.UnicodeUTF8))
         self.repoList.horizontalHeaderItem(1).setText(QtGui.QApplication.translate("repoListDialog", "Path", None, QtGui.QApplication.UnicodeUTF8))
         self.repoList.horizontalHeaderItem(2).setText(QtGui.QApplication.translate("repoListDialog", "Host", None, QtGui.QApplication.UnicodeUTF8))
+        self.repoList.horizontalHeaderItem(3).setText(QtGui.QApplication.translate("repoListDialog", "Enabled", None, QtGui.QApplication.UnicodeUTF8))
         __sortingEnabled = self.repoList.isSortingEnabled()
         self.repoList.setSortingEnabled(False)
         self.repoList.item(0, 0).setText(QtGui.QApplication.translate("repoListDialog", "testnane", None, QtGui.QApplication.UnicodeUTF8))
         self.repoList.item(0, 1).setText(QtGui.QApplication.translate("repoListDialog", "/test/path", None, QtGui.QApplication.UnicodeUTF8))
         self.repoList.item(0, 2).setText(QtGui.QApplication.translate("repoListDialog", "testhost.com", None, QtGui.QApplication.UnicodeUTF8))
+        self.repoList.item(0, 3).setText(QtGui.QApplication.translate("repoListDialog", "Yes", None, QtGui.QApplication.UnicodeUTF8))
         self.repoList.setSortingEnabled(__sortingEnabled)
-        self.addButton.setText(QtGui.QApplication.translate("repoListDialog", "Add repository", None, QtGui.QApplication.UnicodeUTF8))
-        self.editButton.setText(QtGui.QApplication.translate("repoListDialog", "Edit repository", None, QtGui.QApplication.UnicodeUTF8))
+        self.addButton.setText(QtGui.QApplication.translate("repoListDialog", "Add", None, QtGui.QApplication.UnicodeUTF8))
+        self.editButton.setText(QtGui.QApplication.translate("repoListDialog", "Edit", None, QtGui.QApplication.UnicodeUTF8))
+        self.delButton.setText(QtGui.QApplication.translate("repoListDialog", "Delete", None, QtGui.QApplication.UnicodeUTF8))
         self.closeButton.setText(QtGui.QApplication.translate("repoListDialog", "Close", None, QtGui.QApplication.UnicodeUTF8))
 

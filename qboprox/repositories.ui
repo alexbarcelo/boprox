@@ -6,19 +6,19 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>450</width>
+    <width>500</width>
     <height>200</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>450</width>
+    <width>500</width>
     <height>200</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>450</width>
+    <width>500</width>
     <height>200</height>
    </size>
   </property>
@@ -78,6 +78,11 @@
        <string>Host</string>
       </property>
      </column>
+     <column>
+      <property name="text">
+       <string>Enabled</string>
+      </property>
+     </column>
      <item row="0" column="0">
       <property name="text">
        <string>testnane</string>
@@ -93,6 +98,11 @@
        <string>testhost.com</string>
       </property>
      </item>
+     <item row="0" column="3">
+      <property name="text">
+       <string>Yes</string>
+      </property>
+     </item>
     </widget>
    </item>
    <item>
@@ -100,14 +110,21 @@
      <item>
       <widget class="QPushButton" name="addButton">
        <property name="text">
-        <string>Add repository</string>
+        <string>Add</string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QPushButton" name="editButton">
        <property name="text">
-        <string>Edit repository</string>
+        <string>Edit</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="delButton">
+       <property name="text">
+        <string>Delete</string>
        </property>
       </widget>
      </item>

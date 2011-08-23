@@ -4,7 +4,7 @@ Created on Aug 22, 2011
 @author: marius
 '''
 
-from PyQt4 import QtGui
+from PyQt4 import QtGui, QtCore
 import string
 from repoconfig import Ui_repoConfig
 
@@ -16,19 +16,39 @@ class QRepoConfig(QtGui.QDialog):
 
     def __init__(self, parent = None):
         QtGui.QDialog.__init__(self, parent)
+        self._sett = QtCore.QSettings('boprox','qboprox')
+        self._sett.beginGroup('repositories')
         
     def _prepare(self):
         self.ui = Ui_repoConfig()
         self.ui.setupUi(self)
-        
+            
     def addRepo(self):
         self.editRepo()
     
     def editRepo(self, name = None):
         self._prepare()
-        # ToDo
-        # if name not None, load settings and put them in dialog
+        if name and (name in self._sett.childGroups()):
+            self._sett.beginGroup(name)
+            self.ui.lineEditName.setText(name)
+            self.ui.lineEditHost.setText(self._sett.value('host'))
+            if self._sett.value('enabled'):
+                self.ui.checkBoxEnabled.setChecked(True)
+            else:
+                self.ui.checkBoxEnabled.setChecked(False)
+            self.ui.lineEditUsername.setText(self._sett.value('username'))
+            if 'key' in self._sett.childKeys():
+                self.ui.comboBoxAuthType.setCurrentIndex(0)
+                self.ui.lineEditRSA.setText(self._sett.value('key'))
+            else:
+                self.ui.comboBoxAuthType.setCurrentIndex(1)
+                self.ui.lineEditPassword.setText(self._sett.value('password'))
+            self._sett.endGroup()
+            pass
         self.exec_()
+        
+    def reject(self):
+        self.close()
     
     def accept(self):
         try:
@@ -52,10 +72,24 @@ class QRepoConfig(QtGui.QDialog):
             msgBox.setDefaultButton(QtGui.QMessageBox.Ok);
             msgBox.exec_();
         else:
-            # ToDo
+            self._sett.beginGroup(name)
+            self._sett.setValue('host', self.ui.lineEditHost.text())
+            self._sett.setValue('port', self.ui.spinBoxPort.value())
+            self._sett.setValue('enabled', self.ui.checkBoxEnabled.checked())
+            self._sett.setValue('username', self.ui.lineEditUsername.text())
+            if self.ui.comboBoxAuthType.currentIndex() == 0:
+                self._sett.setValue('password', self.ui.lineEditPassword.text())
+                self._sett.remove('key')
+            else:
+                self._sett.setValue('key', self.ui.lineEditRSA.text())
+                self._sett.remove('password')
+            self._sett.setValue('localpath', self.ui.lineEditLocalPath.text())        
+            self._sett.setValue('hashesdir', self.ui.lineEditHashes.text())
+            self._sett.setValue('dbfile', self.ui.lineEditDB.text())
+            self._sett.endGroup()
             self.close()
     
     def closeEvent(self, closeEvent):
-        # we remove everything and create again
+        # we remove everything, it will be created next time
         for i in self.children():
             i.deleteLater()

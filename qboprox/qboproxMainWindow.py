@@ -5,22 +5,17 @@ Created on Aug 18, 2011
 '''
 
 from PyQt4 import QtGui, QtCore
-import re
-import string
-
 from about import Ui_About
 from main import Ui_MainWindow
 from repositories import Ui_repoListDialog
 from qrepoconfig import QRepoConfig
-
-from repoconfig import Ui_repoConfig
 
 class qboproxMainWindow(QtGui.QMainWindow):
     '''
     Subclass of QMainWindow, main window of qboprox application
     '''
     def loadSettings(self):
-        self.sett = QtCore.QSettings()
+        self.sett = QtCore.QSettings('boprox','qboprox')
         
     def displayAbout(self):
         DialogAbout = QtGui.QDialog(self)
@@ -31,22 +26,61 @@ class qboproxMainWindow(QtGui.QMainWindow):
     def displayRepoList(self):
         DialogRepoList = QtGui.QDialog(self)
         ui = Ui_repoListDialog()
-        ui.setupUi(DialogRepoList)         
+        ui.setupUi(DialogRepoList)
+        
+        def updateList():
+            # first delete all rows
+            for i in reversed(xrange(0, ui.repoList.rowCount())):
+                ui.repoList.removeRow(i)
+            self.sett.beginGroup('repositories')
+            for repo in self.sett.childGroups():
+                self.sett.beginGroup(repo)
+                ui.repoList.insertRow(0)
+                ui.repoList.setItem(0,0, 
+                    QtGui.QTableWidgetItem(repo) )
+                localpath = self.sett.value('localpath').toPyObject()
+                if localpath: 
+                    ui.repoList.setItem(0,1, 
+                        QtGui.QTableWidgetItem(localpath) )
+                host = self.sett.value('host').toPyObject()
+                ui.repoList.setItem(0,2, 
+                    QtGui.QTableWidgetItem(host) )
+                if self.sett.value('enabled').toPyObject():
+                    val = QtGui.QTableWidgetItem('yes')
+                else:
+                    val = QtGui.QTableWidgetItem('no')
+                ui.repoList.setItem(0,3, val)
+                self.sett.endGroup()
+            self.sett.endGroup()
+            ui.repoList.setCurrentCell(0, 0)
         
         def displayRepoConfigAdd ():
             DialogRepoConfig.addRepo()
+            updateList()
             
         def displayRepoConfigEdit ():
             # set all the information
             # TODO
             DialogRepoConfig.editRepo(str(ui.repoList.item(
                 ui.repoList.currentRow(), 0 ).data(0).toPyObject() ))
+            updateList()
+        
+        def delRepo():
+            name = ui.repoList.item(
+                ui.repoList.currentRow(),0 ).data(0).toPyObject()
+            if name: 
+                self.sett.beginGroup('repositories')
+                self.sett.remove(name)
+                self.sett.endGroup()
+            updateList()
             
         # prepare this, just in case
         DialogRepoConfig = QRepoConfig(DialogRepoList)        
         ui.addButton.clicked.connect(displayRepoConfigAdd)
         ui.editButton.clicked.connect(displayRepoConfigEdit)
-        DialogRepoList.show()
+        ui.delButton.clicked.connect(delRepo)
+        updateList()
+        DialogRepoList.exec_()
         
     def triggerRefresh(self):
         pass
@@ -94,6 +128,7 @@ class qboproxMainWindow(QtGui.QMainWindow):
         apply(QtGui.QMainWindow.__init__, (self,) + args)
         self.mainUi = Ui_MainWindow()
         self.mainUi.setupUi(self)
+        self.loadSettings()
         self.createTray()
         self.connectMySlots()
         self.show()
