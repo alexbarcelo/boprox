@@ -9,6 +9,7 @@ from about import Ui_About
 from main import Ui_MainWindow
 from repositories import Ui_repoListDialog
 from qrepoconfig import QRepoConfig
+from QRepoManager import QRepoManager
 
 class qboproxMainWindow(QtGui.QMainWindow):
     '''
@@ -123,6 +124,15 @@ class qboproxMainWindow(QtGui.QMainWindow):
             self.mainUi.trayIcon.setIcon(ic)
             self.mainUi.trayIcon.setToolTip('qboprox')
             self.mainUi.trayIcon.show()
+    
+    def updateRepos(self):
+        self.sett.beginGroup('repositories')
+        for qi in self.sett.childGroups():
+            i = str(qi)
+            if i not in self._reposWatchers:
+                newrepo = QRepoManager(i, self.mainUi.fileTree)
+                self._reposWatchers[i] = newrepo
+        self.sett.endGroup()
 
     def __init__(self, *args):
         apply(QtGui.QMainWindow.__init__, (self,) + args)
@@ -131,4 +141,6 @@ class qboproxMainWindow(QtGui.QMainWindow):
         self.loadSettings()
         self.createTray()
         self.connectMySlots()
+        self._reposWatchers = dict()
+        self.updateRepos()
         self.show()

@@ -48,11 +48,15 @@ class RepoWorker(QtCore.QThread):
         trefresh = self._settings.value('refresh', 600).toPyObject()
         tlocalcheck = self._settings.value('localcheck', 60).toPyObject()        
         if tlocalcheck > 0:
-            self._timerl = QtCore.QTimer(self)
-            self._timerl.timeout.connect(self._localcheckRepo)
+            self._timerl = QtCore.QTimer()
+            self._timerl.timeout.connect(self._localcheckRepo,
+                # This is needed because the sqlite object lives in this thread
+                QtCore.Qt.DirectConnection)
             self._timerl.start(tlocalcheck*1000)
-        self._timerr = QtCore.QTimer(self)
-        self._timerr.timeout.connect(self._refreshRepo)
+        self._timerr = QtCore.QTimer()
+        self._timerr.timeout.connect(self._refreshRepo,
+            # This is needed because the sqlite object lives in this thread
+            QtCore.Qt.DirectConnection)
         self._timerr.start(trefresh*1000)
     
     def _setWatcher(self):
@@ -61,20 +65,23 @@ class RepoWorker(QtCore.QThread):
     def run(self):
         if not self._settings:
             raise TypeError('No repository name set')
-        with self._settings as sett: 
-            try:
-                self._repo = boprox.client.SingleRepoClient(
-                    host=sett.value('host').toPyObject(),
-                    port=sett.value('port').toPyObject(),
-                    username=sett.value('username').toPyObject(),
-                    permatoken=sett.value('password').toPyObject(),
-                    key=sett.value('key').toPyObject(),
-                    dbfile=sett.value('dbfile').toPyObject(),
-                    localpath=sett.value('localpath').toPyObject(),
-                    hashesdir=sett.value('hashesdir').toPyObject(),
-                    )
-            except StandardError as e:
-                self.parent()._Error(e)
+        try:
+            numport, success = self._settings.value('port').toInt()
+            if not success:
+                numport = 1356
+            self._repo = boprox.client.SingleRepoClient(
+                host=unicode(self._settings.value('host').toPyObject()),
+                port=numport,
+                username=unicode(self._settings.value('username').toPyObject()),
+                permatoken=unicode(self._settings.value('password').toPyObject()),
+                key=unicode(self._settings.value('key').toPyObject()),
+                dbfile=unicode(self._settings.value('dbfile').toPyObject()),
+                localpath=unicode(self._settings.value('localpath').toPyObject()),
+                hashesdir=unicode(self._settings.value('hashesdir').toPyObject()),
+                )
+        except StandardError as e:
+            self.parent()._Error(e)
+            raise
         self._refreshRepo()
         self._setTimers()
         self._setWatcher()
@@ -104,6 +111,7 @@ class QRepoManager(QtCore.QObject):
         self.thread.setRepoName(clientRepo)
         self.exitmutex = QtCore.QMutex()
         self.treemutex = QtCore.QMutex()
+        self.thread.start()
         
     def _Error(self, e):
         '''
