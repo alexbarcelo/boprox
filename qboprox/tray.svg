@@ -1,37 +1,49 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg xmlns="http://www.w3.org/2000/svg"
-	viewBox="0 0 62 62"
-	width="62" height="62"
-	version="1.1">
-	<defs>
-		<linearGradient id="fieldGradient"
-			gradientUnits="userSpaceOnUse"
-			x1="42.9863" y1="7.01270"
-			x2="22.0144" y2="51.9871">
-			<stop offset="0.0" stop-color="#BCD6FE" />
-			<stop offset="1.0" stop-color="#6787D3" />
-		</linearGradient>
-		<linearGradient id="edgeGradient"
-			gradientUnits="userSpaceOnUse"
-			x1="55.4541" y1="42.7529"
-			x2="9.54710" y2="16.2485">
-			<stop offset="0.0" stop-color="#3057A7" />
-			<stop offset="1.0" stop-color="#5A7AC6" />
-		</linearGradient>
-		<radialGradient id="shadowGradient">
-			<stop offset="0.0" stop-color="#C0C0C0" />
-			<stop offset="0.88" stop-color="#C0C0C0" />
-			<stop offset="1.0" stop-color="#C0C0C0" stop-opacity="0.0" />
-		</radialGradient>
-	</defs>
-	<circle id="shadow" r="26.5" cx="32.5" cy="29.5"
-		fill="url(#shadowGradient)"
-		transform="matrix(1.0648,0.0,0.0,1.064822,-2.1,1.0864)" />
-	<circle id="field" r="25.8" cx="31" cy="31"
-		fill="url(#fieldGradient)" stroke="url(#edgeGradient)" stroke-width="2" />
-	<g id="info" fill="white">
-		<polygon points="23,25 35,25 35,44 39,44 39,48 23,48 23,44 27,44 27,28 23,28 23,25" />
-		<circle r="4" cx="31" cy="17" />
-	</g>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   version="1.1"
+   width="60"
+   height="60"
+   id="svg4273">
+  <defs
+     id="defs4275" />
+  <metadata
+     id="metadata4278">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     id="layer1">
+    <path
+       d="m 164.28571,591.20148 a 12.767858,12.767858 0 1 1 -25.53571,0 12.767858,12.767858 0 1 1 25.53571,0 z"
+       transform="matrix(1.1748252,0,0,1.1748244,-141.00699,-664.55792)"
+       id="path2993-9-9-4"
+       style="fill:none;stroke:#008000;stroke-width:4.25595379;stroke-miterlimit:4.05000019;stroke-opacity:1;stroke-dasharray:none" />
+    <path
+       d="m 151.51785,578.43362 a 12.767858,12.767858 0 0 1 0,25.53571"
+       transform="matrix(1.1748252,0,0,1.1748244,-171.00699,-664.55793)"
+       id="path2993-9-9-3-9-5-8"
+       style="fill:none;stroke:#008000;stroke-width:4.25595379;stroke-miterlimit:4.05000019;stroke-opacity:1;stroke-dasharray:none" />
+    <path
+       d="m 21.999998,5 0,25"
+       id="path3145-2"
+       style="fill:none;stroke:#008000;stroke-width:5;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.05000019;stroke-opacity:1;stroke-dasharray:none" />
+    <path
+       d="m 21.999998,55 0,-25"
+       id="path3147-0"
+       style="fill:none;stroke:#008000;stroke-width:5;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4.05000019;stroke-opacity:1;stroke-dasharray:none" />
+  </g>
 </svg>

@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'repoconfig.ui'
 #
-# Created: Tue Aug 23 18:38:46 2011
+# Created: Wed Aug 24 14:40:50 2011
 #      by: PyQt4 UI code generator 4.8.3
 #
 # WARNING! All changes made in this file will be lost!
@@ -223,6 +223,6 @@ class Ui_repoConfig(object):
         self.labelHashes.setText(QtGui.QApplication.translate("repoConfig", "Hash directory:", None, QtGui.QApplication.UnicodeUTF8))
         self.toolButtonHashes.setText(QtGui.QApplication.translate("repoConfig", "...", None, QtGui.QApplication.UnicodeUTF8))
         self.toolButtonDB.setText(QtGui.QApplication.translate("repoConfig", "...", None, QtGui.QApplication.UnicodeUTF8))
-        self.labelDB.setText(QtGui.QApplication.translate("repoConfig", "Database:", None, QtGui.QApplication.UnicodeUTF8))
-        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabStorage), QtGui.QApplication.translate("repoConfig", "Local storage", None, QtGui.QApplication.UnicodeUTF8))
+        self.labelDB.setText(QtGui.QApplication.translate("repoConfig", "Database file:", None, QtGui.QApplication.UnicodeUTF8))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tabStorage), QtGui.QApplication.translate("repoConfig", "Local files", None, QtGui.QApplication.UnicodeUTF8))
 
