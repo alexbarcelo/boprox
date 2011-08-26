@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'repositories.ui'
 #
-# Created: Wed Aug 24 14:40:50 2011
+# Created: Wed Aug 24 16:17:10 2011
 #      by: PyQt4 UI code generator 4.8.3
 #
 # WARNING! All changes made in this file will be lost!
@@ -19,7 +19,6 @@ class Ui_repoListDialog(object):
         repoListDialog.setObjectName(_fromUtf8("repoListDialog"))
         repoListDialog.resize(500, 200)
         repoListDialog.setMinimumSize(QtCore.QSize(500, 200))
-        repoListDialog.setMaximumSize(QtCore.QSize(500, 200))
         self.verticalLayout = QtGui.QVBoxLayout(repoListDialog)
         self.verticalLayout.setObjectName(_fromUtf8("verticalLayout"))
         self.repoList = QtGui.QTableWidget(repoListDialog)

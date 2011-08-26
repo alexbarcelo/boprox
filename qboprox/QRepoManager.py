@@ -4,7 +4,7 @@ Created on Aug 18, 2011
 @author: marius
 '''
 
-from PyQt4 import QtCore
+from PyQt4 import QtCore, QtGui
 import boprox.client
 
 class RepoWorker(QtCore.QThread):
@@ -19,6 +19,7 @@ class RepoWorker(QtCore.QThread):
         QtCore.QThread.__init__(self, parent)
         self.exiting = False
         self._settings = None
+        print "Thread id on RepoWorker initialization:", QtCore.QThread.currentThreadId()
     
     def setRepoName(self, reponame):
         # Open the settings of this repo
@@ -38,6 +39,7 @@ class RepoWorker(QtCore.QThread):
             self.parent()._Error(e)
             
     def _localcheckRepo(self):
+        print "Thread id on localcheck timeout:", QtCore.QThread.currentThreadId()
         try:
             self._repo.UpdateToServer()
             self._repo.CheckDeletedFiles()
@@ -62,6 +64,13 @@ class RepoWorker(QtCore.QThread):
     def _setWatcher(self):
         pass
     
+    def updateGrandParentTree(self):
+        tree = self.parent().parent()
+        if not isinstance(tree, QtGui.QTreeWidget):
+            self.parent()._Error('Bad client initialization. Either window has been closed or there is a software bug')
+            return
+        # Some ``walk'' magic from the client API (TODO)
+    
     def run(self):
         if not self._settings:
             raise TypeError('No repository name set')
@@ -82,9 +91,14 @@ class RepoWorker(QtCore.QThread):
         except StandardError as e:
             self.parent()._Error(e)
             raise
-        self._refreshRepo()
-        self._setTimers()
-        self._setWatcher()
+        if self._settings.value('enabled').toBool():
+            # Only do server side things if the repository is enabled
+            self._refreshRepo()
+            self._setTimers()
+            self._setWatcher()
+        # this even if the repository is disabled
+        #TODO somethings about the treeView
+        print "Thread id on RepoWorker run:", QtCore.QThread.currentThreadId()
         self.exec_()
 
 class QRepoManager(QtCore.QObject):
@@ -112,6 +126,7 @@ class QRepoManager(QtCore.QObject):
         self.exitmutex = QtCore.QMutex()
         self.treemutex = QtCore.QMutex()
         self.thread.start()
+        print "Thread id on QRepoManager:", QtCore.QThread.currentThreadId()
         
     def _Error(self, e):
         '''
@@ -123,8 +138,30 @@ class QRepoManager(QtCore.QObject):
     def treeViewUpdate(self):
         '''
         This QRepoManager has permission to change and update the QTreeView
+        
+        Thread-safe
         '''
+        ml = QtCore.QMutexLocker(self.treemutex)
         self._update = True
+        self.thread.updateGrandParentTree()
+    
+    def askUpdate(self):
+        '''
+        This is the child asking the parent if it can update the tree.
+        
+        It's thread safe. The parent calls updateGrandParentTree after 
+        stablishing a QMutexLocker
+        '''
+        if self._update == False:
+            return
+        ml = QtCore.QMutexLocker(self.treemutex)
+        if self._update == False:
+            # strange case, that a treeViewLock has been called from another
+            # thread in two lines
+            return
+        # Here we are sure that _update is True and that nobody else will be
+        # changing the tree 
+        self.thread.updateGrandParentTree() 
     
     def treeViewLock(self):
         '''
@@ -132,6 +169,6 @@ class QRepoManager(QtCore.QObject):
         Will wait if it was being updated.
         '''
         # wait if we were doing something
-        QtCore.QMutexLocker(self.treemutex)
+        ml = QtCore.QMutexLocker(self.treemutex)
         self._update = False
         

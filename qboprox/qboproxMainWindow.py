@@ -82,6 +82,7 @@ class qboproxMainWindow(QtGui.QMainWindow):
         ui.delButton.clicked.connect(delRepo)
         updateList()
         DialogRepoList.exec_()
+        self.updateRepos()
         
     def triggerRefresh(self):
         pass
@@ -96,6 +97,14 @@ class qboproxMainWindow(QtGui.QMainWindow):
             else:
                 self.show()
     
+    def changedRepo (self, newRepo):
+        name = str(newRepo)
+        for i in xrange( self.mainUi.repoComboBox.count() ):
+            s = str(self.mainUi.repoComboBox.itemText(i))
+            if s != name:
+                self._reposWatchers[s].treeViewLock()
+        self._reposWatchers[name].treeViewUpdate()
+    
     def closeEvent(self, event):
         self.setVisible(False)
         event.ignore()
@@ -109,6 +118,8 @@ class qboproxMainWindow(QtGui.QMainWindow):
         self.mainUi.actionQuit.activated.connect(self.triggerQuit)
         self.mainUi.trayQuit.activated.connect(self.triggerQuit)
         self.mainUi.trayIcon.activated.connect(self.toggleVisible)
+        self.mainUi.repoComboBox.currentIndexChanged[QtCore.QString].connect(
+            self.changedRepo)
         
     def createTray(self):
         # "De-attach" de MenuTray menu
@@ -132,6 +143,7 @@ class qboproxMainWindow(QtGui.QMainWindow):
             if i not in self._reposWatchers:
                 newrepo = QRepoManager(i, self.mainUi.fileTree)
                 self._reposWatchers[i] = newrepo
+                self.mainUi.repoComboBox.addItem(qi)
         self.sett.endGroup()
 
     def __init__(self, *args):
@@ -141,6 +153,6 @@ class qboproxMainWindow(QtGui.QMainWindow):
         self.loadSettings()
         self.createTray()
         self.connectMySlots()
-        self._reposWatchers = dict()
+        self._reposWatchers = dict() 
         self.updateRepos()
         self.show()

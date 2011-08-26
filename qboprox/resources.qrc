@@ -1,6 +1,7 @@
 <RCC>
   <qresource prefix="html"/>
   <qresource prefix="icons">
-    <file>tray.svg</file>
+    <file alias="repoicon.svg">../art/repoicon.svg</file>
+    <file alias="tray.svg">../art/tray.svg</file>
   </qresource>
 </RCC>
