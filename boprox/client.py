@@ -18,17 +18,20 @@ import logging
 from deltaindustries import Deltas, Hashes
 import Sanitize
 
-def _fileAcceptor( filenames ):
+def _fileAcceptor( filenames , removeList = False):
     '''
     Auxiliary function for filtering filenames and foldernames.
     Ignore the files with a dot prefixing it (hidden files in unix operative 
     systems). Using Sanitize information
     '''
-    for file in filenames:
+    # we reverse because we may delete folders on-the-go
+    for file in reversed(filenames):
         badfile = False
         for ch in Sanitize.FORBIDDEN_CHARS:
             if ch in file:
                 badfile = True
+                if removeList:
+                    filenames.remove(file)
                 break
         if not badfile:
             firstch, lastch = file[0], file[-1]
@@ -36,8 +39,10 @@ def _fileAcceptor( filenames ):
                 badfile = True
             elif file in Sanitize.FORBIDDEN_NAMES:
                 badfile = True
-            else: 
+            else:
                 yield file
+            if badfile and removeList:
+                filenames.remove(file)
 
 def getKeyFromPEM(PEMdata):
     '''
@@ -303,14 +308,14 @@ class SingleRepoClient:
             # Recursive removal
             if row['isfolder'] and not row['deleted']:
                 self._rmdir(extpath, row['file'], 
-                    posixpath.join(remotepath,dir) )
+                    posixpath.join(remotepath,dir), openedconn )
             # File removal, if necessary
             elif row['deleted'] != True:
                 self._logger.debug ( 'local path: %s -- local file: %s', 
                     row['path'], row['file'])
                 self._logger.debug('Remote path: %s', remotepath)
                 self._rm(row['path'],row['file'], 
-                    posixpath.join(remotepath,dir) )
+                    posixpath.join(remotepath,dir), openedconn )
         idrev, tsnow = self._RemoteCaller.RmDir(remotepath, dir)
         openedconn.execute('''update files set deleted=1,lastrev=?,timestamp=?,localtime=NULL
             where idfile=?''', (idrev, tsnow, folderRow['idfile']) )
@@ -348,6 +353,65 @@ class SingleRepoClient:
         for it...)
         '''
         pass
+    
+    
+    def LocalWalk(self, top=''):
+        '''
+        This is similar to a os.walk, but done with the local database. It 
+        @return: yields a 3-tuple (dirpath, dirnames, filenames), being dirpath
+        a string and dirnames and filenames two lists of elements. Each element
+        of dirname and filenames is a 2-tuple ( file, identifier ), where file
+        is a string and identifier is an int (key idfile on database)
+        
+        @see: os.walk --this function tries to be similar, but more basic 
+        (p.ex. no topdown)
+        '''
+        # stack is where the folders are being put
+        stack = [ [''] ]
+        actual = top
+        self._logger.info('Doing a LocalWalk on folder "%s"', top)
+        while stack:
+            self._logger.debug ('In folder "%s", current stack:', actual)
+            self._logger.debug ( repr(stack) )
+            # throw the top list if it is empty, and goup because an empty list
+            # means a folder finished
+            while not stack[-1]:
+                stack.pop()
+                actual = posixpath.split(actual)[0]
+            # take the topmost list of folders (actual path)
+            dirs = stack[-1]
+            # and start with the first folder 
+            next = dirs.pop()
+            havesub = True
+            while havesub:
+                # linguistical thing only
+                curr = next
+                path = posixpath.join(actual,curr).rstrip('/')
+                cur = self._db.execute('''select idfile, file, isfolder 
+                    from files where path=?''', path)
+                subdirs = []
+                files = []
+                for row in cur:
+                    elem = ( row['file'], row['idfile'] )
+                    if row['isfolder']:
+                        subdirs.append(elem)
+                    else:
+                        files.append(elem)
+                # folder scanned
+                yield (top, subdirs, files)
+                if subdirs:
+                    # this means that this folder has subfolders to scan
+                    next = subdirs.pop()
+                    actual = posixpath.join(actual, curr)
+                    self._logger.debug ( 'Going into %s from %s', next, actual)
+                    # if there are pending folders, put them on the stack 
+                    # for later. If there are not, push a empty list because
+                    # we have to track how many subfolders are we entering
+                    stack.push (subdirs)
+                else:
+                    # we have ended this path, now we should "go up"
+                    actual = posixpath.split(actual)[0]
+                    havesub = False
     
     def _lockTimestamp(self):
         '''
@@ -552,7 +616,7 @@ class SingleRepoClient:
             remotedir = posixpath.normpath(posixpath.join (self._remotepath, dirpath))
             if remotedir == '.': remotedir = ''
             # first, eliminate directories which haven't been modified
-            for dircheck in _fileAcceptor(dirnames):
+            for dircheck in _fileAcceptor(dirnames, removeList = True):
                 modifiedTime = os.stat(posixpath.join(dirpath,dircheck)).st_mtime
                 row = self._db.execute ( '''select localtime from files where
                     path=? and file=? and isfolder=1''', 
