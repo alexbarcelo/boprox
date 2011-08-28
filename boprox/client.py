@@ -375,9 +375,12 @@ class SingleRepoClient:
             self._logger.debug ( repr(stack) )
             # throw the top list if it is empty, and goup because an empty list
             # means a folder finished
-            while not stack[-1]:
+            while stack and not stack[-1]:
                 stack.pop()
                 actual = posixpath.split(actual)[0]
+            if not stack:
+                # here we finish 
+                return
             # take the topmost list of folders (actual path)
             dirs = stack[-1]
             # and start with the first folder 
@@ -388,7 +391,7 @@ class SingleRepoClient:
                 curr = next
                 path = posixpath.join(actual,curr).rstrip('/')
                 cur = self._db.execute('''select idfile, file, isfolder 
-                    from files where path=?''', path)
+                    from files where path=?''', (path,) )
                 subdirs = []
                 files = []
                 for row in cur:
@@ -398,19 +401,19 @@ class SingleRepoClient:
                     else:
                         files.append(elem)
                 # folder scanned
-                yield (top, subdirs, files)
+                yield (path, subdirs, files)
                 if subdirs:
                     # this means that this folder has subfolders to scan
+                    # get back the remaining elements (without id)
+                    subdirs = list(zip(*subdirs)[0]) 
                     next = subdirs.pop()
-                    actual = posixpath.join(actual, curr)
+                    actual = posixpath.join(actual, curr).rstrip('/')
                     self._logger.debug ( 'Going into %s from %s', next, actual)
                     # if there are pending folders, put them on the stack 
                     # for later. If there are not, push a empty list because
                     # we have to track how many subfolders are we entering
-                    stack.push (subdirs)
+                    stack.append (subdirs)
                 else:
-                    # we have ended this path, now we should "go up"
-                    actual = posixpath.split(actual)[0]
                     havesub = False
     
     def _lockTimestamp(self):
