@@ -4,9 +4,7 @@ Created on Aug 4, 2011
 
 @author: marius
 '''
-import sys
 import boprox.client
-from time import sleep
 import logging
 import os.path
 
