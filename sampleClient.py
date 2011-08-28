@@ -21,7 +21,7 @@ DOTBOPROX = '.boprox'
 DBFILE=os.path.join(HOME,DOTBOPROX,'clientdb.sqlite')
 HASHESDIR=os.path.join(HOME,DOTBOPROX,'hashesdir')
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 def main():
     adminrepo = boprox.client.SingleRepoClient(host=HOST, port=PORT,
