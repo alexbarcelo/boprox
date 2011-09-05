@@ -8,7 +8,7 @@ import rsa
 from pyasn1.codec.der.decoder import decode as derdecode
 from base64 import b64decode
 from xmlrpclib import ServerProxy, Binary, ProtocolError
-import sqlite3
+from pysqlite2 import dbapi2 as sqlite3
 import os
 import posixpath
 from datetime import datetime
