@@ -3,7 +3,7 @@ import os
 
 setup (
     name = "boprox_client",
-    version = "0.2.1",
+    version = "0.2.2",
     description="Client API package for the boprox project",
     author='Alex Barcelo',
     author_email='alex.barcelo@gmail.com',

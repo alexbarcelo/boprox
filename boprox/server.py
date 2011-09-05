@@ -14,7 +14,7 @@ from xmlrpclib import Binary
 from SimpleXMLRPCServer import SimpleXMLRPCServer, SimpleXMLRPCDispatcher, SimpleXMLRPCRequestHandler
 from base64 import b64decode
 import os
-import sqlite3
+from pysqlite2 import dbapi2 as sqlite3
 import logging
 from datetime import datetime
 import time

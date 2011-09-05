@@ -8,7 +8,7 @@ import rsa
 from pyasn1.codec.der.decoder import decode as derdecode
 from base64 import b64decode
 import random
-import sqlite3
+from pysqlite2 import dbapi2 as sqlite3
 from datetime import datetime
 import os.path
 
@@ -28,12 +28,14 @@ TOKENCHARS.extend(lowercase)
 TOKENCHARS.extend(numbers)
 TOKENCHARS.extend(other)
 
-BASEMASK   =  0x03
-READ       =  0x01 
-WRITE      =  0x02
-DELEGMASK  =  0x0C
-DELEGREAD  =  0x04
-DELEGWRITE =  0x08
+BASEMASK   =  0o007
+READ       =  0o001 
+WRITE      =  0o002
+ADMIN      =  0o004
+DELEGMASK  =  0o070
+DELEGREAD  =  0o010
+DELEGWRITE =  0o020
+DELEGADMIN =  0o040
 
 class UserSQLiteAuth:
     '''
