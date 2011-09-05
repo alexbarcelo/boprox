@@ -8,7 +8,7 @@ else:
 
 setup (
     name = "boprox_server",
-    version = "0.2.1",
+    version = "0.3.0",
     description="Server package for the boprox project",
     author='Alex Barcelo',
     author_email='alex.barcelo@gmail.com',
@@ -26,7 +26,7 @@ multi-user server).
         'http://sourceforge.net/projects/boprox/files/deltaindustries/'
         ],
     install_requires = """
-        deltaindustries >= 0.1
+        deltaindustries >= 0.3.0, < 0.4.0
         rsa >= 1.0.0
         pyasn1 >= 0.0.1""" + requireSSL,
     entry_points = {

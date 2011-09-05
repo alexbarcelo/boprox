@@ -6,7 +6,7 @@ def read(fname):
 
 setup (
     name = "deltaindustries",
-    version = "0.1",
+    version = "0.3.0",
     description="Delta and hash utilities (calculation and containers) for the boprox project",
     author='Alex Barcelo',
     author_email='alex.barcelo@gmail.com',
